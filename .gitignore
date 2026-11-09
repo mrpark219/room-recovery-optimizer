@@ -1,0 +1,22 @@
+# Local editor and OS files
+.idea/
+*.iml
+.DS_Store
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Kotlin / Gradle
+/backend/.gradle/
+/backend/.kotlin/
+/backend/build/
+
+# Next.js
+/frontend/node_modules/
+/frontend/.next/
+/frontend/out/
+/frontend/coverage/
+/frontend/*.tsbuildinfo
+/frontend/next-env.d.ts
