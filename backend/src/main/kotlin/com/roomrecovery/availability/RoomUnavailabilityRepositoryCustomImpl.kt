@@ -22,7 +22,8 @@ class RoomUnavailabilityRepositoryCustomImpl(private val query: JPAQueryFactory)
     }
 
     override fun findInAccommodation(accommodationId: Long, id: Long): RoomUnavailability? {
-        return query.selectFrom(roomUnavailability).where(inAccommodation(accommodationId), roomUnavailability.id.eq(id))
+        return query.selectFrom(roomUnavailability)
+            .where(inAccommodation(accommodationId), roomUnavailability.id.eq(id))
             .fetchOne()
     }
 

@@ -16,9 +16,17 @@ class RoomAssignment(
     val roomId: Long,
     @Column(name = "start_date", nullable = false)
     val startDate: LocalDate,
-    @Column(name = "`endDate`", nullable = false)
-    val endDate: LocalDate // 숙박에 미포함
+    endDate: LocalDate // 숙박에 미포함
 ) {
+    @Column(name = "`endDate`", nullable = false)
+    var endDate: LocalDate = endDate
+        protected set
+
+    internal fun shorten(end: LocalDate) {
+        require(end > startDate && end < endDate) { "배정 종료일을 확인해 주세요" }
+        endDate = end
+    }
+
     init {
         require(startDate < endDate) { "배정 종료일은 시작일보다 늦어야 합니다" }
     }

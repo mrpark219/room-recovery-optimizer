@@ -8,6 +8,7 @@ import java.time.LocalDate
 
 class UnavailabilityInputTest {
     private val start = LocalDate.parse("2026-11-09")
+
     @Test
     fun `이용 불가 종료일은 시작일보다 늦어야 한다`() {
         // given: 공통 날짜를 사용하거나 검증할 값을 직접 지정한다

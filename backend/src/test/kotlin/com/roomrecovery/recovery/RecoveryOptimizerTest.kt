@@ -18,8 +18,14 @@ class RecoveryOptimizerTest {
     private fun room(id: Long): Room {
         return Room(id, 1, 1, "$id")
     }
-    private fun booking(id: Long, start: Int, end: Int, status: ReservationStatus = ReservationStatus.CHECKED_IN) =
-        Reservation(
+
+    private fun booking(
+        id: Long,
+        start: Int,
+        end: Int,
+        status: ReservationStatus = ReservationStatus.CHECKED_IN
+    ): Reservation {
+        return Reservation(
             id,
             1,
             1,
@@ -29,19 +35,24 @@ class RecoveryOptimizerTest {
             day.plusDays(end.toLong()),
             status
         )
+    }
 
-    private fun assignment(id: Long, room: Long, start: Int, end: Int) =
-        RoomAssignment(id, 1, id, room, day.plusDays(start.toLong()), day.plusDays(end.toLong()))
+    private fun assignment(id: Long, room: Long, start: Int, end: Int): RoomAssignment {
+        return RoomAssignment(id, 1, id, room, day.plusDays(start.toLong()), day.plusDays(end.toLong()))
+    }
 
-    private fun outage(room: Long, start: Int, end: Int) =
-        RoomUnavailability.create(room, day.plusDays(start.toLong()), day.plusDays(end.toLong()), "repair")
+    private fun outage(room: Long, start: Int, end: Int): RoomUnavailability {
+        return RoomUnavailability.create(room, day.plusDays(start.toLong()), day.plusDays(end.toLong()), "repair")
+    }
 
-    private fun common() = RecoveryInput(
-        day, (1L..4L).map(::room), listOf(type),
-        listOf(booking(1, 0, 4), booking(2, 0, 4), booking(3, 2, 4, ReservationStatus.CONFIRMED), booking(4, 0, 2)),
-        listOf(assignment(1, 1, 0, 4), assignment(2, 2, 0, 4), assignment(3, 3, 2, 4), assignment(4, 4, 0, 2)),
-        listOf(outage(1, 0, 4), outage(2, 0, 4))
-    )
+    private fun common(): RecoveryInput {
+        return RecoveryInput(
+            day, (1L..4L).map(::room), listOf(type),
+            listOf(booking(1, 0, 4), booking(2, 0, 4), booking(3, 2, 4, ReservationStatus.CONFIRMED), booking(4, 0, 2)),
+            listOf(assignment(1, 1, 0, 4), assignment(2, 2, 0, 4), assignment(3, 3, 2, 4), assignment(4, 4, 0, 2)),
+            listOf(outage(1, 0, 4), outage(2, 0, 4))
+        )
+    }
 
     @Test
     fun `여러 장애가 발생해도 정상 예약을 이동하지 않고 객실을 배정한다`() {
@@ -209,6 +220,7 @@ class RecoveryOptimizerTest {
         assertEquals(listOf(3L, 4L), greedy.placements.single().segments.map { it.roomId })
     }
 
-    private fun Reservation.copyForTest(status: ReservationStatus) =
-        Reservation(id, accommodationId, bookedRoomTypeId, bookedAt, guestCount, startDate, endDate, status)
+    private fun Reservation.copyForTest(status: ReservationStatus): Reservation {
+        return Reservation(id, accommodationId, bookedRoomTypeId, bookedAt, guestCount, startDate, endDate, status)
+    }
 }

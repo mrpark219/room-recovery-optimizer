@@ -6,8 +6,9 @@ import java.time.LocalDate
 
 class RoomAssignmentTest {
     private val start = LocalDate.of(2026, 11, 10)
-    private fun assignment(roomId: Long, from: LocalDate, until: LocalDate) =
-        RoomAssignment(1, 1, 1, roomId, from, until)
+    private fun assignment(roomId: Long, from: LocalDate, until: LocalDate): RoomAssignment {
+        return RoomAssignment(1, 1, 1, roomId, from, until)
+    }
 
     @Test
     fun `배정은 시작일을 포함하고 종료일을 제외한다`() {

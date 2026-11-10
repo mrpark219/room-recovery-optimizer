@@ -26,6 +26,6 @@ class RoomType(
 
     fun canAccommodate(bookedType: RoomType, guestCount: Int): Boolean {
         return guestCount > 0 && accommodationId == bookedType.accommodationId &&
-            capacity >= guestCount && grade >= bookedType.grade
+                capacity >= guestCount && grade >= bookedType.grade
     }
 }

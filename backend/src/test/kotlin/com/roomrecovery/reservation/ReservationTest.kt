@@ -9,8 +9,9 @@ import java.time.LocalDate
 class ReservationTest {
     private val start = LocalDate.of(2026, 11, 10)
     private val end = start.plusDays(3)
-    private fun reservation(status: ReservationStatus) =
-        Reservation(1, 1, 1, Instant.EPOCH, 2, start, end, status)
+    private fun reservation(status: ReservationStatus): Reservation {
+        return Reservation(1, 1, 1, Instant.EPOCH, 2, start, end, status)
+    }
 
     @Test
     fun `남은 숙박일은 시작 전에는 전체이며 퇴실일부터 0이다`() {

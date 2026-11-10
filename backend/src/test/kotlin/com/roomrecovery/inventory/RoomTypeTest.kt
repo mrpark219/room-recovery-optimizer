@@ -4,8 +4,9 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
 class RoomTypeTest {
-    private fun type(accommodationId: Long, capacity: Int, grade: Int) =
-        RoomType(1, accommodationId, "객실", capacity, grade, 100000)
+    private fun type(accommodationId: Long, capacity: Int, grade: Int): RoomType {
+        return RoomType(1, accommodationId, "객실", capacity, grade, 100000)
+    }
 
     @Test
     fun `객실 유형은 같은 숙소에서 인원과 등급을 모두 만족해야 한다`() {

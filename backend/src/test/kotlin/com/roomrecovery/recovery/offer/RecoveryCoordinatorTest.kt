@@ -14,18 +14,24 @@ import java.time.LocalDate
 
 class RecoveryCoordinatorTest {
     private val day = LocalDate.of(2026, 11, 11)
-    private fun reservation(id: Long, room: Long, start: Int, end: Int) = Reservation(
-        id, 1, 1, Instant.ofEpochSecond(id), 1, day.plusDays(start.toLong()), day.plusDays(end.toLong()),
-        if (room == 201L) ReservationStatus.CONFIRMED else ReservationStatus.CHECKED_IN
-    )
+    private fun reservation(id: Long, room: Long, start: Int, end: Int): Reservation {
+        return Reservation(
+            id, 1, 1, Instant.ofEpochSecond(id), 1, day.plusDays(start.toLong()), day.plusDays(end.toLong()),
+            if (room == 201L) ReservationStatus.CONFIRMED else ReservationStatus.CHECKED_IN
+        )
+    }
 
-    private fun assignment(id: Long, room: Long, start: Int, end: Int) = RoomAssignment(
-        id, 1, id, room, day.plusDays(start.toLong()), day.plusDays(end.toLong())
-    )
+    private fun assignment(id: Long, room: Long, start: Int, end: Int): RoomAssignment {
+        return RoomAssignment(
+            id, 1, id, room, day.plusDays(start.toLong()), day.plusDays(end.toLong())
+        )
+    }
 
-    private fun outage(room: Long, start: Int, end: Int) = RoomUnavailability.create(
-        room, day.plusDays(start.toLong()), day.plusDays(end.toLong()), "repair"
-    )
+    private fun outage(room: Long, start: Int, end: Int): RoomUnavailability {
+        return RoomUnavailability.create(
+            room, day.plusDays(start.toLong()), day.plusDays(end.toLong()), "repair"
+        )
+    }
 
     private fun fixture(): RecoveryCoordinator {
         val rooms = listOf(101L, 102L, 201L, 202L).map { Room(it, 1, 1, "$it") }

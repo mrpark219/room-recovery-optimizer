@@ -22,18 +22,7 @@ class RecoveryService(
 ) {
     @Transactional(readOnly = true)
     fun calculate(accommodationId: Long, referenceDate: LocalDate): RecoveryCalculation {
-        if (!accommodations.existsById(accommodationId)) {
-            throw NotFound("숙소를 찾을 수 없습니다")
-        }
-
-        val input = RecoveryInput(
-            referenceDate = referenceDate,
-            rooms = rooms.findAllByAccommodationIdOrderById(accommodationId),
-            roomTypes = roomTypes.findAllByAccommodationId(accommodationId),
-            reservations = reservations.findAllByAccommodationIdAndEndDateAfter(accommodationId, referenceDate),
-            assignments = assignments.findAllByAccommodationIdAndEndDateAfter(accommodationId, referenceDate),
-            unavailabilities = unavailabilities.findRemainingInAccommodation(accommodationId, referenceDate)
-        )
+        val input = loadInput(accommodationId, referenceDate)
 
         val plan = RecoveryOptimizer.optimize(input)
         val affectedIds = (plan.placements.map { it.reservationId } + plan.unresolvedReservationIds).toSet()
@@ -47,5 +36,22 @@ class RecoveryService(
             unresolvedReservationIds = plan.unresolvedReservationIds,
             urgentReservationIds = plan.urgentReservationIds
         )
+    }
+
+    @Transactional(readOnly = true)
+    fun loadInput(accommodationId: Long, referenceDate: LocalDate): RecoveryInput {
+        if (!accommodations.existsById(accommodationId)) {
+            throw NotFound("숙소를 찾을 수 없습니다")
+        }
+
+        return RecoveryInput(
+            referenceDate = referenceDate,
+            rooms = rooms.findAllByAccommodationIdOrderById(accommodationId),
+            roomTypes = roomTypes.findAllByAccommodationId(accommodationId),
+            reservations = reservations.findAllByAccommodationIdAndEndDateAfter(accommodationId, referenceDate),
+            assignments = assignments.findAllByAccommodationIdAndEndDateAfter(accommodationId, referenceDate),
+            unavailabilities = unavailabilities.findRemainingInAccommodation(accommodationId, referenceDate)
+        )
+
     }
 }

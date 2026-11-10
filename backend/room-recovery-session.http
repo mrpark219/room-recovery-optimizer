@@ -1,0 +1,171 @@
+@baseUrl = http://localhost:8080
+@accommodationId = 3
+
+# 이 시나리오는 demo DB의 예약과 배정을 변경합니다. 같은 결과를 보려면 새 demo 데이터에서 시작하세요.
+### 101호와 102호의 남은 숙박 전체를 이용 불가로 설정합니다. 종료일은 숙박에 포함하지 않습니다.
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/unavailabilities
+Content-Type: application/json
+
+{
+  "roomId": 101,
+  "startDate": "2026-11-11",
+  "endDate": "2026-11-15",
+  "reason": "세션 데모 점검"
+}
+
+> {%
+    client.test("101호 이용 불가 생성", function () {
+        client.assert(response.status === 201 && response.body.id != null);
+        client.global.set("sessionOutage1", String(response.body.id));
+    });
+%}
+
+### 102호 이용 불가 생성
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/unavailabilities
+Content-Type: application/json
+
+{
+  "roomId": 102,
+  "startDate": "2026-11-11",
+  "endDate": "2026-11-15",
+  "reason": "세션 데모 점검"
+}
+
+> {%
+    client.test("102호 이용 불가 생성", function () {
+        client.assert(response.status === 201 && response.body.id != null);
+        client.global.set("sessionOutage2", String(response.body.id));
+    });
+%}
+
+### 복구 세션 생성: A(1001)만 201호 → 202호 분할 제안을 받습니다.
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions
+Content-Type: application/json
+
+{
+  "referenceDate": "2026-11-11"
+}
+
+> {%
+    client.test("A 제안 생성", function () {
+        client.assert(response.status === 201 && response.body.sessionId != null);
+        client.global.set("recoverySessionId", String(response.body.sessionId));
+        var offers = response.body.offers.filter(function (o) {
+            return o.reservationId === 1001;
+        });
+        client.assert(offers.length === 1 && response.body.offers.length === 1);
+        client.assert(offers[0].segments.length === 2 && offers[0].segments[0].roomId === 201 && offers[0].segments[1].roomId === 202);
+        client.global.set("offerA", String(offers[0].id));
+    });
+%}
+
+### A가 취소를 요청하면 재계산 후 B(1002)에게 제안합니다.
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recoverySessionId}}/offers/{{offerA}}/decision
+Content-Type: application/json
+
+{
+  "decision": "CANCEL_REQUESTED"
+}
+
+> {%
+    client.test("B 제안 생성", function () {
+        client.assert(response.status === 200);
+        var offers = response.body.offers.filter(function (o) {
+            return o.reservationId === 1002;
+        });
+        client.assert(offers.length === 1 && offers[0].segments.length === 2);
+        client.assert(offers[0].segments[0].roomId === 201 && offers[0].segments[1].roomId === 202);
+        client.global.set("offerB", String(offers[0].id));
+    });
+%}
+
+### B 수락: 계획된 이동은 아직 실제 이동 이력이 아닙니다.
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recoverySessionId}}/offers/{{offerB}}/decision
+Content-Type: application/json
+
+{
+  "decision": "ACCEPTED"
+}
+
+> {%
+    client.test("B 수락과 빈 이동 이력", function () {
+        client.assert(response.status === 200 && response.body.moveHistory.length === 0);
+    });
+%}
+
+### 첫 이동 완료: 102호 → 201호
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recoverySessionId}}/offers/{{offerB}}/moves
+Content-Type: application/json
+
+{
+  "date": "2026-11-11",
+  "fromRoomId": 102,
+  "toRoomId": 201
+}
+
+> {%
+    client.test("첫 이동 완료", function () {
+        client.assert(response.status === 200 && response.body.moveHistory.length === 1);
+    });
+%}
+
+### 두 번째 이동 완료: 201호 → 202호
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recoverySessionId}}/offers/{{offerB}}/moves
+Content-Type: application/json
+
+{
+  "date": "2026-11-13",
+  "fromRoomId": 201,
+  "toRoomId": 202
+}
+
+> {%
+    client.test("두 번째 이동 완료", function () {
+        client.assert(response.status === 200 && response.body.moveHistory.length === 2);
+    });
+%}
+
+### 중복 이동은 충돌로 거절됩니다.
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recoverySessionId}}/offers/{{offerB}}/moves
+Content-Type: application/json
+
+{
+  "date": "2026-11-13",
+  "fromRoomId": 201,
+  "toRoomId": 202
+}
+
+> {%
+    client.test("중복 이동 충돌", function () {
+        client.assert(response.status === 409);
+    });
+%}
+
+### 세션 조회: 완료된 이동 이력 두 건을 확인합니다.
+GET {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recoverySessionId}}
+
+> {%
+    client.test("이동 이력 조회", function () {
+        client.assert(response.status === 200 && response.body.moveHistory.length === 2);
+    });
+%}
+
+### 이 실행에서 생성한 이용 불가만 정리합니다. 예약과 배정 변경은 유지됩니다.
+DELETE {{baseUrl}}/api/accommodations/{{accommodationId}}/unavailabilities/{{sessionOutage1}}
+
+> {%
+    client.test("101호 이용 불가 삭제", function () {
+        client.assert(response.status === 204);
+        client.global.clear("sessionOutage1");
+    });
+%}
+
+### 102호 이용 불가 정리
+DELETE {{baseUrl}}/api/accommodations/{{accommodationId}}/unavailabilities/{{sessionOutage2}}
+
+> {%
+    client.test("102호 이용 불가 삭제", function () {
+        client.assert(response.status === 204);
+        client.global.clear("sessionOutage2");
+    });
+%}

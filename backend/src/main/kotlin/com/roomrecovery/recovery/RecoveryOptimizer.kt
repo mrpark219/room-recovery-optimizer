@@ -27,6 +27,7 @@ object RecoveryOptimizer {
         private fun start(reservation: Reservation): LocalDate {
             return maxOf(input.referenceDate, reservation.startDate)
         }
+
         private fun blocked(roomId: Long, date: LocalDate): Boolean {
             return input.unavailabilities.any { it.overlaps(roomId, date, date.plusDays(1)) }
         }
