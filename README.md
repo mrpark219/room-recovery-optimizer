@@ -55,3 +55,24 @@
 
 - 예약 접수순으로 배정하는 기준선과 전체 조합 탐색을 **동일한 입력, 제약, 우선순위** 조건에서 비교한다.
 - 수용 건수와 제약 위반 여부를 확인하고, 같은 예약 집합을 수용한 경우에만 예상 비용 차이를 비교한다.
+
+---
+
+## 4. Docker로 실행
+
+```bash
+docker compose up --build --wait
+```
+
+이미지를 먼저 빌드한 후 실행할 수도 있습니다.
+
+```bash
+./scripts/build-images.sh
+docker compose up --no-build --wait
+```
+
+- 프런트엔드는 [http://localhost:3000](http://localhost:3000), 백엔드
+  API는 [http://localhost:8080/api/accommodations](http://localhost:8080/api/accommodations)에서 확인할 수 있습니다.
+- MySQL은 로컬 3307 포트에 연결됩니다. 기본 프로필은 데모 데이터를 사용하는 `demo`입니다.
+- `docker compose down`은 컨테이너와 네트워크를 중지·삭제하지만 MySQL 볼륨은 유지합니다.
+- 데이터를 초기화하려면 `docker compose down -v`를 실행하세요.

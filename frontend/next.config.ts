@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
+  ...(process.env.NEXT_STANDALONE === "1" ? { output: "standalone" } : {}),
   async rewrites() {
     return [
       {

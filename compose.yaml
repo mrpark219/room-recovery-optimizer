@@ -17,5 +17,41 @@ services:
       timeout: 3s
       retries: 30
       start_period: 15s
+  backend:
+    image: room-recovery-backend:local
+    build: ./backend
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/room_recovery
+      DB_USER: room_recovery
+      DB_PASSWORD: room_recovery
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/accommodations HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && read -r status <&3 && [[ \"$$status\" == HTTP/*\\ 200* ]]"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+  frontend:
+    image: room-recovery-frontend:local
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8080
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/accommodations').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 volumes:
   mysql-data:
