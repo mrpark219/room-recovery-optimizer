@@ -1,5 +1,6 @@
 package com.roomrecovery.recovery.offer
 
+import com.roomrecovery.availability.RoomUnavailabilityRepository
 import com.roomrecovery.common.NotFound
 import com.roomrecovery.recovery.RecoveryService
 import com.roomrecovery.reservation.ReservationRepository
@@ -15,6 +16,7 @@ class RecoverySessionService(
     private val recoveryService: RecoveryService,
     private val reservations: ReservationRepository,
     private val assignments: RoomAssignmentRepository,
+    private val unavailabilities: RoomUnavailabilityRepository,
     private val transaction: TransactionTemplate
 ) {
 
@@ -54,13 +56,22 @@ class RecoverySessionService(
             throw RecoveryConflict(e.message ?: "제안에 응답할 수 없습니다")
         }
 
-        transaction.executeWithoutResult {
+        val conflictingOutages = transaction.execute {
             val reservation = reservations.findById(offer.reservationId).orElseThrow { NotFound("예약을 찾을 수 없습니다") }
             if (reservation.accommodationId != accommodationId) {
                 throw NotFound("예약을 찾을 수 없습니다")
             }
             if (reservation.status == ReservationStatus.CANCELLED) {
                 throw RecoveryConflict("이미 취소된 예약입니다")
+            }
+
+            if (decision == RecoveryDecision.ACCEPTED) {
+                val currentOutages = unavailabilities.findRemainingInAccommodation(accommodationId, offer.referenceDate)
+                if (offer.segments.any { segment ->
+                        currentOutages.any { it.overlaps(segment.roomId, segment.startDate, segment.endDate) }
+                    }) {
+                    return@execute currentOutages
+                }
             }
             if (decision == RecoveryDecision.CANCEL_REQUESTED) {
                 reservation.cancelForRecovery()
@@ -80,6 +91,13 @@ class RecoverySessionService(
 
             val newSegments = candidate.assignments.filter { it.reservationId == offer.reservationId && it.id == 0L }
             assignments.saveAllAndFlush(newSegments)
+            null
+        }
+        if (conflictingOutages != null) {
+            val refreshed = session.coordinator.copy()
+            refreshed.replanForIncident(offer.referenceDate, conflictingOutages, emptySet())
+            session.coordinator = refreshed
+            throw RecoveryConflict("객실 이용 불가 정보가 변경되었습니다. 복구 계획을 다시 불러와 주세요.")
         }
         session.coordinator = candidate
 

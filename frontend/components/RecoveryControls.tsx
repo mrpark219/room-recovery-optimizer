@@ -84,8 +84,8 @@ export default function RecoveryControls({
       )}
       {savedSession && (
         <p className="footnote">
-          진행 중인 세션은 생성 시점의 상태를 사용하므로 이후 장애 변경은
-          반영되지 않습니다.
+          첫 제안은 세션 생성 시점의 상태를 기준으로 계산합니다. 수락 시 새
+          장애와 겹치면 배정안을 다시 계산합니다.
         </p>
       )}
       {preview && <ImpactPreview preview={preview} />}
