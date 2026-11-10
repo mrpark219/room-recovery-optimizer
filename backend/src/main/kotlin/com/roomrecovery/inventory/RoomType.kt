@@ -1,11 +1,6 @@
 package com.roomrecovery.inventory
 
-import jakarta.persistence.Column
-import jakarta.persistence.Entity
-import jakarta.persistence.GeneratedValue
-import jakarta.persistence.GenerationType
-import jakarta.persistence.Id
-import jakarta.persistence.Table
+import jakarta.persistence.*
 
 @Entity
 @Table(name = "room_type")
@@ -29,7 +24,8 @@ class RoomType(
         require(nightlyRate >= 0) { "객실 기준가는 0 이상이어야 합니다" }
     }
 
-    fun canAccommodate(bookedType: RoomType, guestCount: Int): Boolean =
-        guestCount > 0 && accommodationId == bookedType.accommodationId &&
+    fun canAccommodate(bookedType: RoomType, guestCount: Int): Boolean {
+        return guestCount > 0 && accommodationId == bookedType.accommodationId &&
             capacity >= guestCount && grade >= bookedType.grade
+    }
 }

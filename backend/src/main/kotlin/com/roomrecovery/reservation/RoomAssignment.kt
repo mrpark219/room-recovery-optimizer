@@ -1,11 +1,6 @@
 package com.roomrecovery.reservation
 
-import jakarta.persistence.Column
-import jakarta.persistence.Entity
-import jakarta.persistence.GeneratedValue
-import jakarta.persistence.GenerationType
-import jakarta.persistence.Id
-import jakarta.persistence.Table
+import jakarta.persistence.*
 import java.time.LocalDate
 
 @Entity
@@ -28,8 +23,11 @@ class RoomAssignment(
         require(startDate < endDate) { "배정 종료일은 시작일보다 늦어야 합니다" }
     }
 
-    fun contains(date: LocalDate): Boolean = date >= startDate && date < endDate
+    fun contains(date: LocalDate): Boolean {
+        return date >= startDate && date < endDate
+    }
 
-    fun overlaps(other: RoomAssignment): Boolean =
-        roomId == other.roomId && startDate < other.endDate && other.startDate < endDate
+    fun overlaps(other: RoomAssignment): Boolean {
+        return roomId == other.roomId && startDate < other.endDate && other.startDate < endDate
+    }
 }

@@ -1,11 +1,6 @@
 package com.roomrecovery.availability
 
-import jakarta.persistence.Column
-import jakarta.persistence.Entity
-import jakarta.persistence.GeneratedValue
-import jakarta.persistence.GenerationType
-import jakarta.persistence.Id
-import jakarta.persistence.Table
+import jakarta.persistence.*
 import java.time.LocalDate
 
 @Entity
@@ -16,7 +11,8 @@ class RoomUnavailability private constructor(
     endDate: LocalDate, // 숙박에 미포함
     reason: String
 ) {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null
         protected set
 
@@ -54,8 +50,9 @@ class RoomUnavailability private constructor(
     }
 
     companion object {
-        fun create(roomId: Long, startDate: LocalDate, endDate: LocalDate, reason: String): RoomUnavailability =
-            RoomUnavailability(roomId, startDate, endDate, reason)
+        fun create(roomId: Long, startDate: LocalDate, endDate: LocalDate, reason: String): RoomUnavailability {
+            return RoomUnavailability(roomId, startDate, endDate, reason)
+        }
 
         fun validate(roomId: Long, startDate: LocalDate, endDate: LocalDate, reason: String) {
             require(roomId > 0) { "객실 ID는 양수여야 합니다" }

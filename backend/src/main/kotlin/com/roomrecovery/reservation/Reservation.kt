@@ -1,13 +1,6 @@
 package com.roomrecovery.reservation
 
-import jakarta.persistence.Column
-import jakarta.persistence.Entity
-import jakarta.persistence.EnumType
-import jakarta.persistence.Enumerated
-import jakarta.persistence.GeneratedValue
-import jakarta.persistence.GenerationType
-import jakarta.persistence.Id
-import jakarta.persistence.Table
+import jakarta.persistence.*
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -31,7 +24,8 @@ class Reservation(
     val endDate: LocalDate, // 숙박에 미포함
     status: ReservationStatus
 ) {
-    @Enumerated(EnumType.STRING) @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     var status: ReservationStatus = status
         protected set
 
@@ -45,11 +39,15 @@ class Reservation(
         require(startDate < endDate) { "체크아웃 날짜는 체크인 날짜보다 늦어야 합니다" }
     }
 
-    fun totalNights(): Long = ChronoUnit.DAYS.between(startDate, endDate)
+    fun totalNights(): Long {
+        return ChronoUnit.DAYS.between(startDate, endDate)
+    }
 
-    fun remainingNights(onDate: LocalDate): Long = when {
-        onDate >= endDate -> 0
-        onDate <= startDate -> totalNights()
-        else -> ChronoUnit.DAYS.between(onDate, endDate)
+    fun remainingNights(onDate: LocalDate): Long {
+        return when {
+            onDate >= endDate -> 0
+            onDate <= startDate -> totalNights()
+            else -> ChronoUnit.DAYS.between(onDate, endDate)
+        }
     }
 }
