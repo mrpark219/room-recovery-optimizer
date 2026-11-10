@@ -9,5 +9,6 @@ data class RecoverySessionView(
     val referenceDate: LocalDate,
     val plan: RecoveryPlan?,
     val offers: List<RecoveryOffer>,
-    val moveHistory: List<RoomMoveHistory>
+    val moveHistory: List<RoomMoveHistory>,
+    val finishBlockedReason: String?
 )

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import RecoveryDetails from "@/components/RecoveryDetails";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { api, ApiError, base, sessionKey } from "@/lib/api";
@@ -13,6 +14,8 @@ export default function Recovery({
   id: string;
   sessionId: string;
 }) {
+  const router = useRouter();
+  const [finishing, setFinishing] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
 
@@ -91,8 +94,36 @@ export default function Recovery({
     }
   }
 
+  async function finish() {
+    setFinishing(false);
+    setBusy(true);
+    setError("");
+    try {
+      await api<void>(`${path}/finish`, { method: "POST" });
+      if (localStorage.getItem(sessionKey(id)) === sessionId) {
+        localStorage.removeItem(sessionKey(id));
+      }
+      router.replace(`/accommodations/${id}/outages`);
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const unresolvedCount = session?.plan?.unresolvedReservationIds.length ?? 0;
+
   return (
     <div className="shell">
+      {finishing && session && (
+        <ConfirmDialog
+          title="복구 세션 종료"
+          message={`세션을 종료하시겠습니까?${unresolvedCount ? ` 미해결 예약 ${unresolvedCount}건은 미해결 상태로 남습니다.` : ""}${session.moveHistory.length ? " 이동 완료 내역은 종료 후 조회할 수 없습니다." : ""}`}
+          confirmLabel="세션 종료"
+          onClose={() => setFinishing(false)}
+          onConfirm={() => void finish()}
+        />
+      )}
       {cancelTarget && (
         <ConfirmDialog
           title="예약 취소"
@@ -124,14 +155,26 @@ export default function Recovery({
         <p className="message">세션을 불러오는 중입니다.</p>
       )}
       {session && (
-        <RecoveryDetails
-          session={session}
-          rooms={rooms}
-          busy={busy}
-          onDecision={updateOffer}
-          onCancel={setCancelTarget}
-          onMove={updateOffer}
-        />
+        <>
+          <RecoveryDetails
+            session={session}
+            rooms={rooms}
+            busy={busy}
+            onDecision={updateOffer}
+            onCancel={setCancelTarget}
+            onMove={updateOffer}
+          />
+          <section className="card">
+            {session.finishBlockedReason && <p>{session.finishBlockedReason}</p>}
+            <button
+              className="button-link"
+              disabled={busy || !!session.finishBlockedReason}
+              onClick={() => setFinishing(true)}
+            >
+              복구 세션 종료
+            </button>
+          </section>
+        </>
       )}
     </div>
   );

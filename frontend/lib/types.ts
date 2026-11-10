@@ -39,6 +39,7 @@ export type Offer = {
   decision: "ACCEPTED" | "CANCEL_REQUESTED" | null;
 };
 export type Session = {
+  finishBlockedReason: string | null;
   sessionId: string;
   accommodationId: number;
   referenceDate: string;

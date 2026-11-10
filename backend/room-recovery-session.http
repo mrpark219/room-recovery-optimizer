@@ -150,6 +150,43 @@ GET {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recov
     });
 %}
 
+### 복구 세션 종료
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recoverySessionId}}/finish
+
+> {%
+    client.test("세션 종료", function () { client.assert(response.status === 204); });
+%}
+
+### 종료한 세션 조회
+GET {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{recoverySessionId}}
+
+> {%
+    client.test("종료한 세션 조회", function () { client.assert(response.status === 404); });
+%}
+
+### 같은 숙소에서 새 세션 시작
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions
+Content-Type: application/json
+
+{
+  "referenceDate": "2026-11-11"
+}
+
+> {%
+    client.test("새 세션 생성", function () {
+        client.assert(response.status === 201 && response.body.sessionId != null);
+        client.assert(String(response.body.sessionId) !== client.global.get("recoverySessionId"));
+        client.global.set("nextRecoverySessionId", String(response.body.sessionId));
+    });
+%}
+
+### 새 세션 종료
+POST {{baseUrl}}/api/accommodations/{{accommodationId}}/recovery-sessions/{{nextRecoverySessionId}}/finish
+
+> {%
+    client.test("새 세션 종료", function () { client.assert(response.status === 204); });
+%}
+
 ### 이 실행에서 생성한 이용 불가만 정리합니다. 예약과 배정 변경은 유지됩니다.
 DELETE {{baseUrl}}/api/accommodations/{{accommodationId}}/unavailabilities/{{sessionOutage1}}
 

@@ -105,4 +105,35 @@ class RecoverySessionServiceTest {
         assertThrows(NotFound::class.java) { service.decide(1, session.sessionId, oldOffer.id, RecoveryDecision.ACCEPTED) }
     }
 
+    @Test
+    fun `대기 제안과 미기록 이동을 처리한 후 종료하면 새 세션을 시작한다`() {
+        val date = LocalDate.of(2026, 11, 10)
+        val reservation = Reservation(1, 1, 1, Instant.EPOCH, 1, date.minusDays(1), date.plusDays(2), ReservationStatus.CHECKED_IN)
+        val old = RoomAssignment(1, 1, 1, 1, date.minusDays(1), date.plusDays(2))
+        val outage = RoomUnavailability.create(1, date, date.plusDays(2), "수리")
+        val input = RecoveryInput(date, listOf(Room(1, 1, 1, "1"), Room(2, 1, 1, "2")),
+            listOf(RoomType(1, 1, "기본", 2, 1, 100)), listOf(reservation), listOf(old), listOf(outage))
+        val recovery = mock(RecoveryService::class.java)
+        val reservations = mock(ReservationRepository::class.java)
+        val assignments = mock(RoomAssignmentRepository::class.java)
+        val outages = mock(RoomUnavailabilityRepository::class.java)
+        val manager = mock(PlatformTransactionManager::class.java)
+        `when`(recovery.loadInput(1, date)).thenReturn(input)
+        `when`(manager.getTransaction(any())).thenReturn(mock(TransactionStatus::class.java))
+        `when`(reservations.findById(1)).thenReturn(Optional.of(reservation))
+        val service = RecoverySessionService(recovery, reservations, assignments, outages, TransactionTemplate(manager))
+        val session = service.create(1, date)
+        val offer = session.offers.single()
+        assertThrows(NotFound::class.java) { service.finish(1, "wrong") }
+        assertThrows(RecoveryConflict::class.java) { service.finish(1, session.sessionId) }
+        service.decide(1, session.sessionId, offer.id, RecoveryDecision.ACCEPTED)
+        assertThrows(RecoveryConflict::class.java) { service.finish(1, session.sessionId) }
+        val move = offer.plannedMoves.single()
+        service.move(1, session.sessionId, offer.id, MoveRequest(move.date, move.fromRoomId, move.toRoomId))
+        service.finish(1, session.sessionId)
+        assertThrows(NotFound::class.java) { service.get(1, session.sessionId) }
+        assertNotEquals(session.sessionId, service.create(1, date).sessionId)
+        verify(assignments).saveAllAndFlush(anyList())
+    }
+
 }

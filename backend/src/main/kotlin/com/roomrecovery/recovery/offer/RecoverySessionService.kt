@@ -22,6 +22,7 @@ class RecoverySessionService(
 
     private val sessions = mutableMapOf<Long, RecoverySession>()
 
+    @Synchronized
     fun create(accommodationId: Long, date: LocalDate): RecoverySessionView {
         if (sessions.containsKey(accommodationId)) {
             throw RecoveryConflict("이미 진행 중인 복구 세션이 있습니다")
@@ -35,10 +36,12 @@ class RecoverySessionService(
         return view(session)
     }
 
+    @Synchronized
     fun get(accommodationId: Long, sessionId: String): RecoverySessionView {
         return view(session(accommodationId, sessionId))
     }
 
+    @Synchronized
     fun decide(
         accommodationId: Long,
         sessionId: String,
@@ -104,6 +107,7 @@ class RecoverySessionService(
         return view(session)
     }
 
+    @Synchronized
     fun move(accommodationId: Long, sessionId: String, offerId: Long, request: MoveRequest): RecoverySessionView {
         val session = session(accommodationId, sessionId)
         if (session.coordinator.offers.none { it.id == offerId }) {
@@ -121,6 +125,13 @@ class RecoverySessionService(
         return view(session)
     }
 
+    @Synchronized
+    fun finish(accommodationId: Long, sessionId: String) {
+        val coordinator = session(accommodationId, sessionId).coordinator
+        coordinator.finishBlockedReason()?.let { throw RecoveryConflict(it) }
+        sessions.remove(accommodationId)
+    }
+
     private fun session(accommodationId: Long, sessionId: String): RecoverySession {
         return sessions[accommodationId]?.takeIf { it.id == sessionId }
             ?: throw NotFound("복구 세션을 찾을 수 없습니다")
@@ -129,7 +140,7 @@ class RecoverySessionService(
     private fun view(session: RecoverySession): RecoverySessionView {
         return RecoverySessionView(
             session.id, session.accommodationId, session.date, session.coordinator.plan,
-            session.coordinator.offers, session.coordinator.moveHistory
+            session.coordinator.offers, session.coordinator.moveHistory, session.coordinator.finishBlockedReason()
         )
     }
 }

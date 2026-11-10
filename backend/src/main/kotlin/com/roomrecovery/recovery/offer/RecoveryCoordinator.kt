@@ -163,6 +163,17 @@ class RecoveryCoordinator(private var input: RecoveryInput) {
         }
     }
 
+    fun finishBlockedReason(): String? {
+        if (offers.any { it.decision == null }) return "응답 대기 중인 제안이 있습니다"
+        val hasUnrecordedMove = offers.any { offer ->
+                offer.decision == RecoveryDecision.ACCEPTED && offer.plannedMoves.any { move ->
+                    history.none { it.reservationId == offer.reservationId && it.matches(move) }
+                }
+            }
+        if (hasUnrecordedMove) return "기록되지 않은 이동이 있습니다"
+        return null
+    }
+
     private fun RoomMoveHistory.matches(move: PlannedMove): Boolean {
         return date == move.date && fromRoomId == move.fromRoomId && toRoomId == move.toRoomId
     }

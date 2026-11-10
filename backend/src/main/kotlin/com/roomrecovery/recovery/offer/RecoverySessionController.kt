@@ -38,6 +38,12 @@ class RecoverySessionController(private val recoverySessionService: RecoverySess
         return recoverySessionService.move(accommodationId, sessionId, offerId, request)
     }
 
+    @PostMapping("/{sessionId}/finish")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun finish(@PathVariable accommodationId: Long, @PathVariable sessionId: String) {
+        recoverySessionService.finish(accommodationId, sessionId)
+    }
+
     @ExceptionHandler(RecoveryConflict::class)
     fun conflict(e: RecoveryConflict): ResponseEntity<Map<String, String>> {
         return ResponseEntity.status(409).body(mapOf("error" to (e.message ?: "현재 상태에서 처리할 수 없습니다")))
