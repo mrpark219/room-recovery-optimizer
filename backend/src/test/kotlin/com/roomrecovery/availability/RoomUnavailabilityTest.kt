@@ -24,7 +24,7 @@ class RoomUnavailabilityTest {
         assertThrows(IllegalArgumentException::class.java) { entry.update(2, start, start, "누수") }
         assertEquals(1, entry.roomId)
         assertEquals(start, entry.startDate)
-        assertEquals(end, entry.endDateExclusive)
+        assertEquals(end, entry.endDate)
         assertEquals("점검", entry.reason)
         assertThrows(IllegalArgumentException::class.java) { entry.update(2, start, end, " ") }
         assertEquals(1, entry.roomId)

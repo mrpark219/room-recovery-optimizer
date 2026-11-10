@@ -6,47 +6,27 @@ import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Table
-import java.math.BigDecimal
 
 @Entity
 @Table(name = "room_type")
 class RoomType(
-    id: Long,
-    accommodationId: Long,
-    name: String,
-    capacity: Int,
-    grade: Int,
-    nightlyRate: BigDecimal
-    ) {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    var id: Long = id
-        protected set
-
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long,
     @Column(name = "accommodation_id", nullable = false)
-    var accommodationId: Long = accommodationId
-        protected set
-
+    val accommodationId: Long,
     @Column(nullable = false)
-    var name: String = name
-        protected set
-
+    val name: String,
     @Column(nullable = false)
-    var capacity: Int = capacity
-        protected set
-
+    val capacity: Int,
     @Column(nullable = false)
-    var grade: Int = grade
-        protected set
-
-    @Column(name = "nightly_rate", nullable = false, precision = 12, scale = 2)
-    var nightlyRate: BigDecimal = nightlyRate
-        protected set
-
+    val grade: Int,
+    @Column(name = "nightly_rate", nullable = false)
+    val nightlyRate: Int
+) {
     init {
         require(capacity > 0) { "객실 정원은 1명 이상이어야 합니다" }
         require(grade >= 0) { "객실 등급은 0 이상이어야 합니다" }
-        require(nightlyRate.signum() >= 0) { "객실 기준가는 0 이상이어야 합니다" }
+        require(nightlyRate >= 0) { "객실 기준가는 0 이상이어야 합니다" }
     }
 
     fun canAccommodate(bookedType: RoomType, guestCount: Int): Boolean =

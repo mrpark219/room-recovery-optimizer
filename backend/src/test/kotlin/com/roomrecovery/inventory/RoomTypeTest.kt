@@ -2,11 +2,10 @@ package com.roomrecovery.inventory
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import java.math.BigDecimal
 
 class RoomTypeTest {
     private fun type(accommodationId: Long, capacity: Int, grade: Int) =
-        RoomType(1, accommodationId, "객실", capacity, grade, BigDecimal("100000"))
+        RoomType(1, accommodationId, "객실", capacity, grade, 100000)
 
     @Test
     fun `객실 유형은 같은 숙소에서 인원과 등급을 모두 만족해야 한다`() {
@@ -23,6 +22,6 @@ class RoomTypeTest {
     fun `객실 유형의 정원과 등급 및 가격은 유효해야 한다`() {
         assertThrows(IllegalArgumentException::class.java) { type(1, 0, 1) }
         assertThrows(IllegalArgumentException::class.java) { type(1, 1, -1) }
-        assertThrows(IllegalArgumentException::class.java) { RoomType(1, 1, "객실", 1, 1, BigDecimal("-1")) }
+        assertThrows(IllegalArgumentException::class.java) { RoomType(1, 1, "객실", 1, 1, -1) }
     }
 }

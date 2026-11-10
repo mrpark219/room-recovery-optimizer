@@ -8,91 +8,110 @@ import com.roomrecovery.reservation.ReservationStatus
 import com.roomrecovery.reservation.RoomAssignment
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
 class RecoveryOptimizerTest {
-    private val day = LocalDate.of(2026, 1, 1)
-    private val type = RoomType(1, 1, "standard", 2, 1, BigDecimal("100"))
-    private fun room(id: Long, typeId: Long = 1) = Room(id, 1, typeId, "room$id")
-    private fun booking(id: Long, start: Int = 0, end: Int = 2, occupied: Long? = null, count: Int = 1) = Reservation(id, 1, 1, occupied, Instant.ofEpochSecond(id), count, day.plusDays(start.toLong()), day.plusDays(end.toLong()), if (occupied == null) ReservationStatus.CONFIRMED else ReservationStatus.CHECKED_IN)
-    private fun outage(room: Long, start: Int, end: Int) = RoomUnavailability.create(room, day.plusDays(start.toLong()), day.plusDays(end.toLong()), "repair")
-    private fun input(rooms: List<Room>, bookings: List<Reservation>, outages: List<RoomUnavailability> = emptyList(), assignments: List<RoomAssignment> = emptyList(), consent: Map<ConsentKey, ConsentOutcome> = emptyMap(), date: LocalDate = day, types: List<RoomType> = listOf(type), savings: Boolean = false) = RecoveryInput(date, rooms, types, bookings, assignments, outages, consent, savings)
-    private fun assignment(id: Long, booking: Long, room: Long, start: Int, end: Int) = RoomAssignment(id, 1, booking, room, day.plusDays(start.toLong()), day.plusDays(end.toLong()))
+    private val day = LocalDate.of(2026, 11, 11)
+    private val type = RoomType(1, 1, "standard", 2, 1, 100_000)
+    private fun room(id: Long) = Room(id, 1, 1, "$id")
+    private fun booking(id: Long, start: Int, end: Int, status: ReservationStatus = ReservationStatus.CHECKED_IN) =
+        Reservation(id, 1, 1, Instant.ofEpochSecond(id), 1, day.plusDays(start.toLong()), day.plusDays(end.toLong()), status)
+    private fun assignment(id: Long, room: Long, start: Int, end: Int) =
+        RoomAssignment(id, 1, id, room, day.plusDays(start.toLong()), day.plusDays(end.toLong()))
+    private fun outage(room: Long, start: Int, end: Int) =
+        RoomUnavailability.create(room, day.plusDays(start.toLong()), day.plusDays(end.toLong()), "repair")
+    private fun common() = RecoveryInput(
+        day, (1L..4L).map(::room), listOf(type),
+        listOf(booking(1, 0, 4), booking(2, 0, 4), booking(3, 2, 4, ReservationStatus.CONFIRMED), booking(4, 0, 2)),
+        listOf(assignment(1, 1, 0, 4), assignment(2, 2, 0, 4), assignment(3, 3, 2, 4), assignment(4, 4, 0, 2)),
+        listOf(outage(1, 0, 4), outage(2, 0, 4))
+    )
 
-    @Test fun `split requires consent for exact date and never double books`() {
-        val key = ConsentKey(1, day.plusDays(1))
-        val base = input(listOf(room(1), room(2)), listOf(booking(1)), listOf(outage(1, 1, 2), outage(2, 0, 1)))
-        val result = RecoveryOptimizer.optimize(base)
-        assertEquals(0, result.plan.score.served)
-        assertEquals(key, result.recommendation?.consent)
-        assertEquals(0, RecoveryOptimizer.optimize(base.copy(consents = mapOf(ConsentKey(1, day) to ConsentOutcome.ACCEPTED))).plan.score.served)
-        val accepted = RecoveryOptimizer.optimize(base.copy(consents = mapOf(key to ConsentOutcome.ACCEPTED)))
-        assertEquals(listOf(1L, 2L), accepted.plan.placements.single().segments.map { it.roomId })
-        assertNull(RecoveryOptimizer.optimize(base.copy(consents = mapOf(key to ConsentOutcome.DECLINED))).recommendation)
+    @Test fun `multiple outages compete without moving normal reservations`() {
+        val result = RecoveryOptimizer.optimize(common())
+        assertEquals(listOf(1L, 2L), result.urgentReservationIds)
+        assertEquals(1, result.score.urgentServed)
+        assertEquals(1, result.score.served)
+        assertEquals(0L, result.score.additionalCost)
+        assertEquals(2, result.score.moves)
+        assertEquals(listOf(2L), result.unresolvedReservationIds)
+        assertEquals(1L, result.placements.single().reservationId)
+        assertEquals(listOf(3L, 4L), result.placements.single().segments.map { it.roomId })
+        assertEquals(listOf(day, day.plusDays(2)), result.placements.single().segments.map { it.startDate })
     }
 
-    @Test fun `checked in guest uses remaining nights and immediate move requires consent`() {
-        val key = ConsentKey(1, day.plusDays(1))
-        val base = input(listOf(room(1), room(2)), listOf(booking(1, end = 3, occupied = 1)), listOf(outage(1, 1, 3)), listOf(assignment(1, 1, 1, 0, 3)), date = day.plusDays(1))
-        val pending = RecoveryOptimizer.optimize(base)
-        assertEquals(0, pending.plan.score.served)
-        assertEquals(ContactReason.URGENT, pending.recommendation?.reason)
-        val p = RecoveryOptimizer.optimize(base.copy(consents = mapOf(key to ConsentOutcome.ACCEPTED))).plan.placements.single()
-        assertEquals(day.plusDays(1), p.segments.single().startDate)
-        assertEquals(1, p.moves)
+    @Test fun `unlimited moves and consecutive days merge`() {
+        val input = RecoveryInput(day, (1L..5L).map(::room), listOf(type), listOf(booking(1, 0, 4)),
+            listOf(assignment(1, 1, 0, 4)),
+            listOf(outage(1, 0, 4)) + (2L..5L).flatMap { id ->
+                (0..3).filter { it != (id - 2).toInt() }.map { outage(id, it, it + 1) }
+            })
+        val placement = RecoveryOptimizer.optimize(input).placements.single()
+        assertEquals(listOf(2L, 3L, 4L, 5L), placement.segments.map { it.roomId })
+        assertEquals(4, placement.moves)
     }
 
-    @Test fun `fixed assignments and actual occupied room prevent collisions`() {
-        val fixed = booking(2, occupied = 1)
-        val base = input(listOf(room(1), room(2)), listOf(booking(1), fixed), assignments = listOf(assignment(1, 2, 2, 0, 2)))
-        val result = RecoveryOptimizer.optimize(base)
-        assertEquals(0, result.plan.score.served)
-        val two = input(listOf(room(1)), listOf(booking(1), booking(2)))
-        assertEquals(1, RecoveryOptimizer.optimize(two).plan.score.served)
+    @Test fun `original room can be used again after outage`() {
+        val input = RecoveryInput(day, listOf(room(1), room(2)), listOf(type), listOf(booking(1, 0, 4)),
+            listOf(assignment(1, 1, 0, 4)), listOf(outage(1, 1, 3), outage(2, 0, 1), outage(2, 3, 4)))
+        val placement = RecoveryOptimizer.optimize(input).placements.single()
+        assertEquals(listOf(1L, 2L, 1L), placement.segments.map { it.roomId })
+        assertEquals(2, placement.moves)
     }
 
-    @Test fun `eligibility and lower priced higher grade are handled`() {
-        val upgrade = RoomType(2, 1, "upgrade", 3, 2, BigDecimal("50"))
-        val small = RoomType(3, 1, "small", 1, 2, BigDecimal("10"))
-        val result = RecoveryOptimizer.optimize(input(listOf(room(1, 2), room(2, 3)), listOf(booking(1, count = 2)), types = listOf(type, upgrade, small)))
-        assertEquals(1L, result.plan.placements.single().segments.single().roomId)
-        assertEquals(0, result.plan.score.additionalCost.compareTo(BigDecimal.ZERO))
+    @Test fun `unavailable recovery is unresolved and unassigned booking is not demand`() {
+        val input = RecoveryInput(day, listOf(room(1)), listOf(type),
+            listOf(booking(1, 0, 2), booking(2, 0, 2, ReservationStatus.CONFIRMED)),
+            listOf(assignment(1, 1, 0, 2)), listOf(outage(1, 0, 2)))
+        val plan = RecoveryOptimizer.optimize(input)
+        assertTrue(plan.placements.isEmpty())
+        assertEquals(listOf(1L), plan.unresolvedReservationIds)
     }
 
-    @Test fun `savings contact is optional`() {
-        val costly = RoomType(2, 1, "costly", 2, 2, BigDecimal("200"))
-        val key = ConsentKey(1, day.plusDays(1))
-        val base = input(listOf(room(1), room(2), room(3, 2)), listOf(booking(1)), listOf(outage(1, 1, 2), outage(2, 0, 1)), types = listOf(type, costly))
-        assertNull(RecoveryOptimizer.optimize(base).recommendation)
-        assertEquals(ContactReason.COST_SAVINGS, RecoveryOptimizer.optimize(base.copy(considerSavings = true)).recommendation?.reason)
-        assertNull(RecoveryOptimizer.optimize(base.copy(considerSavings = true, consents = mapOf(key to ConsentOutcome.NO_ANSWER))).recommendation)
+    @Test fun `cancelled and finalized bookings do not become recovery demands`() {
+        val base = common()
+        val cancelled = base.reservations[0].copyForTest(ReservationStatus.CANCELLED)
+        val input = base.copy(reservations = listOf(cancelled) + base.reservations.drop(1), fixedReservationIds = setOf(3))
+        val plan = RecoveryOptimizer.optimize(input)
+        assertEquals(listOf(2L), plan.placements.map { it.reservationId })
+        assertTrue(plan.unresolvedReservationIds.isEmpty())
     }
-    @Test fun `interchangeable callers still produce a recommendation`() {
-        val base = input(
-            listOf(room(1), room(2)), listOf(booking(1), booking(2)),
-            listOf(outage(1, 1, 2), outage(2, 0, 1))
+
+    @Test fun `affected reservation retains its usable room until cancellation`() {
+        val a = booking(1, 0, 2)
+        val b = booking(2, 0, 2)
+        val input = RecoveryInput(
+            day, listOf(room(1), room(2), room(3)), listOf(type), listOf(a, b),
+            listOf(assignment(1, 1, 0, 2), assignment(2, 3, 0, 1),
+                RoomAssignment(3, 1, 2, 2, day.plusDays(1), day.plusDays(2))),
+            listOf(outage(1, 0, 2), outage(3, 0, 2))
         )
-        val result = RecoveryOptimizer.optimize(base)
-        assertEquals(0, result.plan.score.served)
-        assertEquals(ContactReason.MORE_RESERVATIONS, result.recommendation?.reason)
-        assertEquals(ConsentKey(1, day.plusDays(1)), result.recommendation?.consent)
+        val before = RecoveryOptimizer.optimize(input)
+        assertTrue(1L in before.unresolvedReservationIds)
+        val after = RecoveryOptimizer.optimize(input.copy(reservations = listOf(a, b.copyForTest(ReservationStatus.CANCELLED))))
+        assertEquals(listOf(1L), after.placements.map { it.reservationId })
+        assertEquals(listOf(2L), after.placements.single().segments.map { it.roomId })
     }
 
-    @Test fun `expired reservations do not create demands`() {
-        val result = RecoveryOptimizer.optimize(input(listOf(room(1)), listOf(booking(1)), date = day.plusDays(2)))
-        assertTrue(result.plan.placements.isEmpty())
-        assertTrue(result.plan.unresolvedReservationIds.isEmpty())
+    @Test fun `two selected plans cannot use same room on the same night`() {
+        val input = RecoveryInput(day, listOf(room(1), room(2), room(3)), listOf(type),
+            listOf(booking(1, 0, 2), booking(2, 0, 2)),
+            listOf(assignment(1, 1, 0, 2), assignment(2, 2, 0, 2)),
+            listOf(outage(1, 0, 2), outage(2, 0, 2)))
+        val result = RecoveryOptimizer.optimize(input)
+        assertEquals(1, result.score.served)
+        assertEquals(1, result.unresolvedReservationIds.size)
     }
-    @Test fun `exact search serves constrained demand that greedy blocks`() {
-        val large = RoomType(2, 1, "large", 2, 1, BigDecimal("100"))
-        val small = RoomType(3, 1, "small", 1, 1, BigDecimal("100"))
-        val base = input(
-            listOf(room(1, 2), room(2, 3)), listOf(booking(1), booking(2, count = 2)),
-            types = listOf(type, large, small)
-        )
-        assertEquals(1, RecoveryOptimizer.bookedAtGreedy(base).score.served)
-        assertEquals(2, RecoveryOptimizer.optimize(base).plan.score.served)
+
+    @Test fun `booking order baseline uses the same eligibility and availability rules`() {
+        val input = common()
+        val greedy = RecoveryOptimizer.bookedAtGreedy(input)
+        assertEquals(listOf(1L, 2L), greedy.urgentReservationIds)
+        assertEquals(1, greedy.score.served)
+        assertEquals(listOf(3L, 4L), greedy.placements.single().segments.map { it.roomId })
     }
+
+    private fun Reservation.copyForTest(status: ReservationStatus) =
+        Reservation(id, accommodationId, bookedRoomTypeId, bookedAt, guestCount, startDate, endDate, status)
 }

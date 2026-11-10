@@ -1,3 +1,3 @@
 package com.roomrecovery.reservation
 
-enum class ReservationStatus { CONFIRMED, CHECKED_IN }
+enum class ReservationStatus { CONFIRMED, CHECKED_IN, CANCELLED }

@@ -1,221 +1,183 @@
 package com.roomrecovery.recovery
 
-import com.roomrecovery.availability.RoomUnavailability
-import com.roomrecovery.inventory.Room
-import com.roomrecovery.inventory.RoomType
 import com.roomrecovery.reservation.Reservation
 import com.roomrecovery.reservation.ReservationStatus
-import com.roomrecovery.reservation.RoomAssignment
-import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-/** Exhaustive search intended for a small, already property- and window-scoped input.
- * Original assignments remain holds for all other reservations, including affected ones; this
- * deliberately excludes chains. Estimated extra cost is clamped at zero because grades do not
- * imply any ordering of rates. Acceptance is specific to a reservation and move date;
- * a decline or no answer suppresses that reservation's proposed moves for this round.
- * Contact recommendations compare one-step alternatives, not an optimal call sequence.
+/** 작은 단일 숙소 입력에서 남은 숙박일의 전체 객실 조합을 탐색한다.
+ * 정상 배정과 확정된 복구 배정은 유지하며, 취소된 예약의 점유는 제외한다.
+ * 결과는 고객별 전체 이동 계획이며 실제 동의나 이동 이력을 기록하지 않는다.
  */
 object RecoveryOptimizer {
-    fun optimize(input: RecoveryInput): RecoveryResult {
-        val problem = Problem(input)
-        val confirmed = problem.solve(false)!!
-        val optimistic = problem.solve(true)!!
-        val confirmedIds = confirmed.placements.map { it.reservationId }.toSet()
-        val coverageReason = when {
-            optimistic.score.urgentServed > confirmed.score.urgentServed -> ContactReason.URGENT
-            optimistic.score.served > confirmed.score.served -> ContactReason.MORE_RESERVATIONS
-            else -> null
-        }
-        val sameSet = if (coverageReason == null && input.considerSavings) {
-            problem.solve(true, requiredIds = confirmedIds)
-        } else null
-        val improvement = coverageReason ?: if (
-            sameSet != null && sameSet.score.additionalCost < confirmed.score.additionalCost
-        ) ContactReason.COST_SAVINGS else null
-        val target = if (improvement == ContactReason.COST_SAVINGS) sameSet!! else optimistic
-        val recommendation = if (improvement == null) null else {
-            target.placements.mapNotNull { it.consent }.filter { it !in input.consents }.distinct()
-                .map { key ->
-                    val required = if (improvement == ContactReason.COST_SAVINGS) confirmedIds else null
-                    key to problem.solve(true, key, requiredIds = required)?.score
-                }
-                .sortedWith(compareBy<Pair<ConsentKey, RecoveryScore?>>(
-                    { if (it.first.reservationId in problem.urgentIds) 0 else 1 },
-                    { it.second?.urgentServed ?: -1 },
-                    { it.second?.served ?: -1 },
-                    { if (improvement == ContactReason.COST_SAVINGS) {
-                        it.second?.additionalCost?.negate() ?: BigDecimal.ZERO
-                    } else BigDecimal.ZERO },
-                    { it.first.moveDate }, { it.first.reservationId }
-                )).firstOrNull()?.let { ContactRecommendation(it.first, improvement) }
-        }
-        val urgentUnresolved = problem.urgentIds.intersect(confirmed.unresolvedReservationIds.toSet())
-        val attention = (problem.immediateAttention + urgentUnresolved).distinct().sorted()
-        return RecoveryResult(confirmed, recommendation, attention)
-    }
+    fun optimize(input: RecoveryInput): RecoveryPlan = Search(input).solve()
 
-    /** Same candidates and constraints as optimize, but irrevocably chooses in booking order. */
-    fun bookedAtGreedy(input: RecoveryInput): RecoveryPlan = Problem(input).solve(false, greedy = true)!!
+    /** 같은 후보와 제약을 사용해 예약 접수 순서대로 최선의 후보를 확정한다. */
+    fun bookedAtGreedy(input: RecoveryInput): RecoveryPlan = Search(input, greedy = true).solve()
 
-    private class Problem(val input: RecoveryInput) {
-        private val types = input.roomTypes.associateBy { it.id }
-        private val rooms = input.rooms.associateBy { it.id }
+    private class Search(private val input: RecoveryInput, private val greedy: Boolean = false) {
+        private val reservations = input.reservations.associateBy { it.id }
+        private val roomTypes = input.roomTypes.associateBy { it.id }
         private val assignments = input.assignments.groupBy { it.reservationId }
-        private fun overlaps(a: LocalDate, b: LocalDate, c: LocalDate, d: LocalDate) = a < d && c < b
-        private fun blocked(room: Long, start: LocalDate, end: LocalDate) =
-            input.unavailabilities.any { it.overlaps(room, start, end) }
-
-        // Stale confirmed bookings cannot be moved in the past.
-        private fun start(r: Reservation) = maxOf(input.referenceDate, r.startDate)
-
-        private fun urgent(r: Reservation) = r.status == ReservationStatus.CHECKED_IN &&
-            input.referenceDate >= r.startDate && input.referenceDate < r.endDateExclusive &&
-            blocked(r.occupiedRoomId!!, input.referenceDate, input.referenceDate.plusDays(1))
-
-        val immediateAttention = input.reservations.filter {
-            it.status == ReservationStatus.CHECKED_IN && input.referenceDate >= it.endDateExclusive &&
-                blocked(it.occupiedRoomId!!, input.referenceDate, input.referenceDate.plusDays(1))
-        }.map { it.id }.sorted()
-        val urgentIds = input.reservations.filter { urgent(it) }.map { it.id }.toSet()
-        private val demands = input.reservations.filter { r ->
-            val affected = assignments[r.id].orEmpty().any { assignment ->
-                val from = maxOf(start(r), assignment.startDate)
-                val to = minOf(r.endDateExclusive, assignment.endDateExclusive)
-                from < to && blocked(assignment.roomId, from, to)
-            }
-            val unassigned = assignments[r.id].isNullOrEmpty() && r.status == ReservationStatus.CONFIRMED
-            r.endDateExclusive > input.referenceDate && start(r) < r.endDateExclusive &&
-                (urgent(r) || unassigned || affected)
-        }.sortedWith(compareBy<Reservation>({ it.bookedAt }, { it.id }))
-
-        private fun candidates(r: Reservation): List<RecoveryPlacement> {
-            val from = start(r)
-            val end = r.endDateExclusive
-            val booked = requireNotNull(types[r.bookedRoomTypeId]) { "Missing booked room type ${r.bookedRoomTypeId}" }
-            val eligible = input.rooms.filter { room ->
-                room.accommodationId == r.accommodationId &&
-                    types[room.roomTypeId]?.canAccommodate(booked, r.guestCount) == true
-            }.sortedBy { it.id }
-            fun free(s: RecoverySegment): Boolean {
-                if (blocked(s.roomId, s.startDate, s.endDateExclusive)) return false
-                if (input.assignments.any {
-                    it.reservationId != r.id && it.roomId == s.roomId &&
-                        overlaps(s.startDate, s.endDateExclusive, it.startDate, it.endDateExclusive)
-                }) return false
-                return input.reservations.none { other ->
-                    other.id != r.id && other.status == ReservationStatus.CHECKED_IN &&
-                        other.occupiedRoomId == s.roomId && input.referenceDate >= other.startDate &&
-                        input.referenceDate < other.endDateExclusive &&
-                        overlaps(s.startDate, s.endDateExclusive, input.referenceDate, input.referenceDate.plusDays(1))
-                }
-            }
-            fun placement(segments: List<RecoverySegment>): RecoveryPlacement? {
-                if (segments.any { !free(it) }) return null
-                val checked = r.status == ReservationStatus.CHECKED_IN
-                val consent = when {
-                    checked && segments.first().roomId != r.occupiedRoomId -> ConsentKey(r.id, from)
-                    segments.size == 2 -> ConsentKey(r.id, segments[1].startDate)
-                    else -> null
-                }
-                val moves = if (checked && segments.first().roomId != r.occupiedRoomId) 1 else segments.size - 1
-                val candidateRate = segments.fold(BigDecimal.ZERO) { sum, segment ->
-                    val rate = types.getValue(rooms.getValue(segment.roomId).roomTypeId).nightlyRate
-                    val nights = ChronoUnit.DAYS.between(segment.startDate, segment.endDateExclusive)
-                    sum + rate.multiply(BigDecimal.valueOf(nights))
-                }
-                val originalRate = booked.nightlyRate.multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(from, end)))
-                return RecoveryPlacement(r.id, segments, (candidateRate - originalRate).max(BigDecimal.ZERO), moves, consent)
-            }
-            val result = mutableListOf<RecoveryPlacement>()
-            for (room in eligible) placement(listOf(RecoverySegment(room.id, from, end)))?.let(result::add)
-            var date = from.plusDays(1)
-            while (date < end) {
-                for (first in eligible) for (second in eligible) {
-                    if (first.id == second.id ||
-                        (r.status == ReservationStatus.CHECKED_IN && first.id != r.occupiedRoomId)
-                    ) continue
-                    val segments = listOf(RecoverySegment(first.id, from, date), RecoverySegment(second.id, date, end))
-                    placement(segments)?.let(result::add)
-                }
-                date = date.plusDays(1)
-            }
-            return result.sortedWith(compareBy<RecoveryPlacement>(
-                { it.additionalCost }, { it.moves },
-                { it.segments.joinToString("|") { s -> "%020d:%s".format(s.roomId, s.startDate) } }
-            ))
+        private fun start(reservation: Reservation) = maxOf(input.referenceDate, reservation.startDate)
+        private fun blocked(roomId: Long, date: LocalDate) =
+            input.unavailabilities.any { it.overlaps(roomId, date, date.plusDays(1)) }
+        private fun currentRoom(reservation: Reservation): Long? = assignments[reservation.id].orEmpty()
+            .filter { it.contains(input.referenceDate) }.singleOrNull()?.roomId
+        private fun isUrgent(reservation: Reservation): Boolean {
+            if (reservation.status != ReservationStatus.CHECKED_IN) return false
+            val roomId = currentRoom(reservation) ?: return false
+            return blocked(roomId, input.referenceDate)
         }
-        private val choices = demands.associate { it.id to candidates(it) }
-        fun solve(
-            optimistic: Boolean,
-            refused: ConsentKey? = null,
-            greedy: Boolean = false,
-            requiredIds: Set<Long>? = null
-        ): RecoveryPlan? {
-            var best: RecoveryPlan? = null
-            val searchDemands = if (requiredIds == null) demands else demands.filter { it.id in requiredIds }
-            if (requiredIds != null && searchDemands.size != requiredIds.size) return null
 
-            fun validConsent(p: RecoveryPlacement): Boolean {
-                val key = p.consent ?: return true
-                if (refused?.reservationId == key.reservationId) return false
-                if (input.consents.any { (k, v) ->
-                    k.reservationId == key.reservationId && v != ConsentOutcome.ACCEPTED
-                }) return false
-                return when (input.consents[key]) {
-                    ConsentOutcome.ACCEPTED -> true
-                    null -> optimistic
-                    else -> false
+        // 기존 배정의 남은 기간이 이용 불가와 겹치는 예약만 복구한다.
+        private val demands = input.reservations.filter { reservation ->
+            reservation.status != ReservationStatus.CANCELLED &&
+                reservation.id !in input.fixedReservationIds && start(reservation) < reservation.endDate &&
+                assignments[reservation.id].orEmpty().any { assignment ->
+                    val from = maxOf(start(reservation), assignment.startDate)
+                    val end = minOf(reservation.endDate, assignment.endDate)
+                    from < end && input.unavailabilities.any { it.overlaps(assignment.roomId, from, end) }
+                }
+        }.sortedWith(compareBy<Reservation>({ it.bookedAt }, { it.id }))
+        // 아직 확정되지 않은 복구 대상의 기존 배정도 다른 예약의 점유로 유지한다.
+        private val activeAssignments = input.assignments.filter { assignment ->
+            reservations[assignment.reservationId]?.status != ReservationStatus.CANCELLED
+        }
+        private val selectedNights = mutableSetOf<Pair<Long, LocalDate>>()
+        private var best: RecoveryPlan? = null
+
+        fun solve(): RecoveryPlan {
+            visitReservation(0, mutableListOf())
+            return checkNotNull(best)
+        }
+
+        private fun visitReservation(index: Int, selected: MutableList<RecoveryPlacement>) {
+            if (index == demands.size) {
+                val candidate = makePlan(selected)
+                if (best == null || better(candidate, best!!)) best = candidate
+                return
+            }
+            // 남은 모든 예약을 수용해도 현재 최선의 수용 건수에 미치지 못하면 중단한다.
+            val bestPlan = best
+            if (bestPlan != null) {
+                val urgentSelected = selected.count { it.reservationId in urgentIds }
+                val urgentRemaining = demands.drop(index).count { it.id in urgentIds }
+                if (urgentSelected + urgentRemaining < bestPlan.score.urgentServed) return
+                if (urgentSelected + urgentRemaining == bestPlan.score.urgentServed &&
+                    selected.size + demands.size - index < bestPlan.score.served
+                ) return
+            }
+            val reservation = demands[index]
+            val current = if (reservation.status == ReservationStatus.CHECKED_IN) currentRoom(reservation) else null
+            if (reservation.status != ReservationStatus.CHECKED_IN || current != null) {
+                val booked = requireNotNull(roomTypes[reservation.bookedRoomTypeId])
+                val eligible = input.rooms.filter { room ->
+                    room.accommodationId == reservation.accommodationId &&
+                        roomTypes[room.roomTypeId]?.canAccommodate(booked, reservation.guestCount) == true
+                }.sortedBy { it.id }
+                val nights = ChronoUnit.DAYS.between(start(reservation), reservation.endDate).toInt()
+                val options = (0 until nights).map { offset ->
+                    val date = start(reservation).plusDays(offset.toLong())
+                    eligible.filter { room ->
+                        !blocked(room.id, date) && activeAssignments.none {
+                            it.reservationId != reservation.id && it.roomId == room.id && it.contains(date)
+                        }
+                    }
+                }
+                if (options.all { it.isNotEmpty() }) {
+                    var greedyChoice: RecoveryPlacement? = null
+                    val roomsByNight = mutableListOf<Long>()
+                    fun visitNight(night: Int, cost: Long, moves: Int) {
+                        if (night == nights) {
+                            val segments = mutableListOf<RecoverySegment>()
+                            roomsByNight.forEachIndexed { offset, roomId ->
+                                val date = start(reservation).plusDays(offset.toLong())
+                                val last = segments.lastOrNull()
+                                if (last != null && last.roomId == roomId) {
+                                    segments[segments.lastIndex] = last.copy(endDate = date.plusDays(1))
+                                } else segments.add(RecoverySegment(roomId, date, date.plusDays(1)))
+                            }
+                            val original = booked.nightlyRate.toLong() * nights
+                            val placement = RecoveryPlacement(
+                                reservation.id, segments, (cost - original).coerceAtLeast(0), moves
+                            )
+                            if (greedy) {
+                                val previous = greedyChoice
+                                if (previous == null || placementOrder(placement, previous) < 0) {
+                                    greedyChoice = placement
+                                }
+                            } else {
+                                selected.add(placement)
+                                visitReservation(index + 1, selected)
+                                selected.removeAt(selected.lastIndex)
+                            }
+                            return
+                        }
+                        val date = start(reservation).plusDays(night.toLong())
+                        for (room in options[night]) {
+                            val key = room.id to date
+                            if (!selectedNights.add(key)) continue
+                            val previous = roomsByNight.lastOrNull() ?: current
+                            roomsByNight.add(room.id)
+                            val rate = roomTypes.getValue(room.roomTypeId).nightlyRate.toLong()
+                            visitNight(night + 1, cost + rate, moves + if (previous != null && previous != room.id) 1 else 0)
+                            roomsByNight.removeAt(roomsByNight.lastIndex)
+                            selectedNights.remove(key)
+                        }
+                    }
+                    visitNight(0, 0, 0)
+                    val choice = greedyChoice
+                    if (greedy && choice != null) {
+                        val occupied = choice.segments.flatMap { segment ->
+                            (0 until ChronoUnit.DAYS.between(segment.startDate, segment.endDate).toInt())
+                                .map { segment.roomId to segment.startDate.plusDays(it.toLong()) }
+                        }
+                        selectedNights.addAll(occupied)
+                        selected.add(choice)
+                        visitReservation(index + 1, selected)
+                        selected.removeAt(selected.lastIndex)
+                        selectedNights.removeAll(occupied.toSet())
+                        return
+                    }
                 }
             }
-            fun compatible(p: RecoveryPlacement, selected: List<RecoveryPlacement>) = p.segments.none { segment ->
-                selected.any { placement -> placement.segments.any { other ->
-                    segment.roomId == other.roomId && overlaps(
-                        segment.startDate, segment.endDateExclusive, other.startDate, other.endDateExclusive
-                    )
-                } }
+            visitReservation(index + 1, selected)
+        }
+
+        private val urgentIds = demands.filter { isUrgent(it) }.map { it.id }.toSet()
+        private fun makePlan(selected: List<RecoveryPlacement>): RecoveryPlan {
+            val servedIds = selected.map { it.reservationId }.toSet()
+            return RecoveryPlan(
+                selected.toList(), demands.filter { it.id !in servedIds }.map { it.id },
+                RecoveryScore(selected.count { it.reservationId in urgentIds }, selected.size,
+                    selected.sumOf { it.additionalCost }, selected.sumOf { it.moves }),
+                urgentIds.sorted()
+            )
+        }
+        private fun placementOrder(a: RecoveryPlacement, b: RecoveryPlacement): Int {
+            val costOrder = a.additionalCost.compareTo(b.additionalCost)
+            if (costOrder != 0) return costOrder
+            val moveOrder = a.moves.compareTo(b.moves)
+            if (moveOrder != 0) return moveOrder
+            fun key(placement: RecoveryPlacement) = placement.segments.joinToString("|") {
+                "%020d:%s".format(it.roomId, it.startDate)
             }
-            fun plan(selected: List<RecoveryPlacement>): RecoveryPlan {
-                val ids = selected.map { it.reservationId }.toSet()
-                val score = RecoveryScore(
-                    demands.count { urgent(it) && it.id in ids }, selected.size,
-                    selected.fold(BigDecimal.ZERO) { sum, p -> sum + p.additionalCost },
-                    selected.sumOf { it.moves }
-                )
-                return RecoveryPlan(selected.toList(), demands.filter { it.id !in ids }.map { it.id }, score)
-            }
-            fun tieKey(plan: RecoveryPlan) = plan.placements.sortedBy { it.reservationId }.joinToString("|") {
-                val segments = it.segments.joinToString(",") { s -> "%020d:%s".format(s.roomId, s.startDate) }
-                "%020d:%s".format(it.reservationId, segments)
-            }
-            fun better(a: RecoveryPlan, b: RecoveryPlan): Boolean {
-                val x = a.score
-                val y = b.score
-                if (x.urgentServed != y.urgentServed) return x.urgentServed > y.urgentServed
-                if (x.served != y.served) return x.served > y.served
-                if (x.additionalCost.compareTo(y.additionalCost) != 0) return x.additionalCost < y.additionalCost
-                if (x.moves != y.moves) return x.moves < y.moves
-                return tieKey(a) < tieKey(b)
-            }
-            fun visit(index: Int, selected: MutableList<RecoveryPlacement>) {
-                if (index == searchDemands.size) {
-                    val candidate = plan(selected)
-                    if (best == null || better(candidate, best!!)) best = candidate
-                    return
+            return key(a).compareTo(key(b))
+        }
+        private fun better(candidate: RecoveryPlan, best: RecoveryPlan): Boolean {
+            val a = candidate.score
+            val b = best.score
+            if (a.urgentServed != b.urgentServed) return a.urgentServed > b.urgentServed
+            if (a.served != b.served) return a.served > b.served
+            if (a.additionalCost != b.additionalCost) return a.additionalCost < b.additionalCost
+            if (a.moves != b.moves) return a.moves < b.moves
+            fun key(plan: RecoveryPlan) = plan.placements.sortedBy { it.reservationId }.joinToString("|") {
+                "%020d:".format(it.reservationId) + it.segments.joinToString(",") { segment ->
+                    "%020d:%s".format(segment.roomId, segment.startDate)
                 }
-                val options = choices.getValue(searchDemands[index].id)
-                    .filter { validConsent(it) && compatible(it, selected) }
-                for (placement in options) {
-                    selected.add(placement)
-                    visit(index + 1, selected)
-                    selected.removeAt(selected.lastIndex)
-                    if (greedy) return
-                }
-                if (requiredIds == null) visit(index + 1, selected)
             }
-            visit(0, mutableListOf())
-            return best
+            return key(candidate) < key(best)
         }
     }
 }

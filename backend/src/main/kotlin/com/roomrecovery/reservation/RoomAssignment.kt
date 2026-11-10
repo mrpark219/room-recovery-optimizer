@@ -11,44 +11,25 @@ import java.time.LocalDate
 @Entity
 @Table(name = "room_assignment")
 class RoomAssignment(
-    id: Long,
-    accommodationId: Long,
-    reservationId: Long,
-    roomId: Long,
-    startDate: LocalDate,
-    endDateExclusive: LocalDate
-    ) {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    var id: Long = id
-        protected set
-
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    val id: Long,
     @Column(name = "accommodation_id", nullable = false)
-    var accommodationId: Long = accommodationId
-        protected set
-
+    val accommodationId: Long,
     @Column(name = "reservation_id", nullable = false)
-    var reservationId: Long = reservationId
-        protected set
-
+    val reservationId: Long,
     @Column(name = "room_id", nullable = false)
-    var roomId: Long = roomId
-        protected set
-
+    val roomId: Long,
     @Column(name = "start_date", nullable = false)
-    var startDate: LocalDate = startDate
-        protected set
-
-    @Column(name = "end_date_exclusive", nullable = false)
-    var endDateExclusive: LocalDate = endDateExclusive
-        protected set
-
+    val startDate: LocalDate,
+    @Column(name = "`endDate`", nullable = false)
+    val endDate: LocalDate // 숙박에 미포함
+) {
     init {
-        require(startDate < endDateExclusive) { "배정 종료일은 시작일보다 늦어야 합니다" }
+        require(startDate < endDate) { "배정 종료일은 시작일보다 늦어야 합니다" }
     }
 
-    fun contains(date: LocalDate): Boolean = date >= startDate && date < endDateExclusive
+    fun contains(date: LocalDate): Boolean = date >= startDate && date < endDate
 
     fun overlaps(other: RoomAssignment): Boolean =
-        roomId == other.roomId && startDate < other.endDateExclusive && other.startDate < endDateExclusive
+        roomId == other.roomId && startDate < other.endDate && other.startDate < endDate
 }
