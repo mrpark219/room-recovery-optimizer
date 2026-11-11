@@ -91,6 +91,21 @@ class RecoveryOptimizerTest {
     }
 
     @Test
+    fun `대체 객실의 기준가가 낮으면 차액을 음수로 계산한다`() {
+        val cheaper = RoomType(2, 1, "cheaper", 2, 2, 90_000)
+        val input = RecoveryInput(
+            day, listOf(room(1), Room(2, 1, 2, "2")), listOf(type, cheaper),
+            listOf(booking(1, 0, 2)), listOf(assignment(1, 1, 0, 2)),
+            listOf(outage(1, 0, 2))
+        )
+
+        val plan = RecoveryOptimizer.optimize(input)
+
+        assertEquals(-20_000L, plan.placements.single().additionalCost)
+        assertEquals(-20_000L, plan.score.additionalCost)
+    }
+
+    @Test
     fun `여러 번 이동할 수 있고 같은 객실의 연속 숙박은 합쳐진다`() {
         // given
         val input = RecoveryInput(

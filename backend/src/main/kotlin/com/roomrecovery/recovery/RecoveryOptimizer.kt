@@ -130,7 +130,7 @@ object RecoveryOptimizer {
 
                             val original = booked.nightlyRate.toLong() * nights
                             val placement = RecoveryPlacement(
-                                reservation.id, segments, (cost - original).coerceAtLeast(0), moves
+                                reservation.id, segments, cost - original, moves
                             )
 
                             if (greedy) {

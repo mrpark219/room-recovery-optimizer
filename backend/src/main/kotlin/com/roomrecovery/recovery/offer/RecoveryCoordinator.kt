@@ -149,7 +149,7 @@ class RecoveryCoordinator(private var input: RecoveryInput) {
 
             RecoveryPlacement(
                 reservation.id, listOf(RecoverySegment(room.id, start, end)),
-                (type.nightlyRate.toLong() - bookedType.nightlyRate).coerceAtLeast(0) * nights,
+                (type.nightlyRate.toLong() - bookedType.nightlyRate) * nights,
                 if (offer.initialRoomId != null && offer.initialRoomId != room.id) 1 else 0
             )
         }
