@@ -200,13 +200,13 @@ object RecoveryOptimizer {
         }
 
         private fun placementOrder(a: RecoveryPlacement, b: RecoveryPlacement): Int {
-            val costOrder = a.additionalCost.compareTo(b.additionalCost)
-            if (costOrder != 0) {
-                return costOrder
-            }
             val moveOrder = a.moves.compareTo(b.moves)
             if (moveOrder != 0) {
                 return moveOrder
+            }
+            val costOrder = a.additionalCost.compareTo(b.additionalCost)
+            if (costOrder != 0) {
+                return costOrder
             }
             fun key(placement: RecoveryPlacement): String {
                 return placement.segments.joinToString("|") {
@@ -225,11 +225,11 @@ object RecoveryOptimizer {
             if (a.served != b.served) {
                 return a.served > b.served
             }
-            if (a.additionalCost != b.additionalCost) {
-                return a.additionalCost < b.additionalCost
-            }
             if (a.moves != b.moves) {
                 return a.moves < b.moves
+            }
+            if (a.additionalCost != b.additionalCost) {
+                return a.additionalCost < b.additionalCost
             }
             fun key(plan: RecoveryPlan): String {
                 return plan.placements.sortedBy { it.reservationId }.joinToString("|") {

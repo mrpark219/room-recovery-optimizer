@@ -75,6 +75,22 @@ class RecoveryOptimizerTest {
     }
 
     @Test
+    fun `당일 장애가 나면 남은 3박을 한 객실에 배정하는 안을 우선한다`() {
+        val deluxe = RoomType(2, 1, "deluxe", 2, 2, 150_000)
+        val input = RecoveryInput(
+            day, listOf(room(1), room(2), Room(3, 1, 2, "3")), listOf(type, deluxe),
+            listOf(booking(1, 0, 3)), listOf(assignment(1, 1, 0, 3)),
+            listOf(outage(1, 0, 3), outage(2, 1, 3))
+        )
+
+        val placement = RecoveryOptimizer.optimize(input).placements.single()
+
+        assertEquals(listOf(RecoverySegment(3, day, day.plusDays(3))), placement.segments)
+        assertEquals(1, placement.moves)
+        assertEquals(150_000L, placement.additionalCost)
+    }
+
+    @Test
     fun `여러 번 이동할 수 있고 같은 객실의 연속 숙박은 합쳐진다`() {
         // given
         val input = RecoveryInput(
