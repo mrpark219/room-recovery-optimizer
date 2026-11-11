@@ -56,5 +56,6 @@ export type Session = {
     };
   } | null;
   offers: Offer[];
+  roomAlternatives: Record<number, Placement[]>;
   moveHistory: (Move & { reservationId: number })[];
 };

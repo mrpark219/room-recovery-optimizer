@@ -2,6 +2,7 @@ package com.roomrecovery.recovery.offer
 
 import com.roomrecovery.availability.RoomUnavailabilityRepository
 import com.roomrecovery.common.NotFound
+import com.roomrecovery.recovery.RecoveryInput
 import com.roomrecovery.recovery.RecoveryService
 import com.roomrecovery.reservation.ReservationRepository
 import com.roomrecovery.reservation.ReservationStatus
@@ -44,7 +45,8 @@ class RecoverySessionService(
 
     @Synchronized
     fun get(accommodationId: Long, sessionId: String): RecoverySessionView {
-        return view(session(accommodationId, sessionId))
+        val session = session(accommodationId, sessionId)
+        return view(session, recoveryService.loadInput(accommodationId, session.date))
     }
 
     @Synchronized
@@ -52,17 +54,16 @@ class RecoverySessionService(
         accommodationId: Long,
         sessionId: String,
         offerId: Long,
-        decision: RecoveryDecision
+        decision: RecoveryDecision,
+        roomId: Long? = null
     ): RecoverySessionView {
         val session = session(accommodationId, sessionId)
         val offer = session.coordinator.offers.singleOrNull { it.id == offerId }
             ?: throw NotFound("유효한 제안을 찾을 수 없습니다")
         val candidate = session.coordinator.copy()
 
-        try {
-            candidate.respond(offerId, decision)
-        } catch (e: IllegalStateException) {
-            throw RecoveryConflict(e.message ?: "제안에 응답할 수 없습니다")
+        if (roomId != null && decision != RecoveryDecision.ACCEPTED) {
+            throw RecoveryConflict("객실 선택은 제안을 수락할 때만 할 수 있습니다.")
         }
 
         val conflictingOutages = transaction.execute {
@@ -74,7 +75,16 @@ class RecoverySessionService(
                 throw RecoveryConflict("이미 취소된 예약입니다")
             }
 
-            if (decision == RecoveryDecision.ACCEPTED) {
+            try {
+                if (roomId != null) {
+                    candidate.selectRoom(offerId, roomId, recoveryService.loadInput(accommodationId, offer.referenceDate))
+                }
+                candidate.respond(offerId, decision)
+            } catch (e: IllegalStateException) {
+                throw RecoveryConflict(e.message ?: "제안에 응답할 수 없습니다")
+            }
+
+            if (decision == RecoveryDecision.ACCEPTED && roomId == null) {
                 val currentOutages = unavailabilities.findRemainingInAccommodation(accommodationId, offer.referenceDate)
                 if (offer.segments.any { segment ->
                         currentOutages.any { it.overlaps(segment.roomId, segment.startDate, segment.endDate) }
@@ -173,10 +183,13 @@ class RecoverySessionService(
             ?: throw NotFound("복구 세션을 찾을 수 없습니다")
     }
 
-    private fun view(session: RecoverySession): RecoverySessionView {
+    private fun view(session: RecoverySession, availability: RecoveryInput? = null): RecoverySessionView {
+        val alternatives = availability?.let(session.coordinator::roomAlternatives)
+            ?: session.coordinator.roomAlternatives()
         return RecoverySessionView(
             session.id, session.accommodationId, session.date, session.coordinator.plan,
-            session.coordinator.offers, session.coordinator.moveHistory, session.coordinator.finishBlockedReason()
+            session.coordinator.offers, session.coordinator.moveHistory, session.coordinator.finishBlockedReason(),
+            alternatives
         )
     }
 }

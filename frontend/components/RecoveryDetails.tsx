@@ -1,20 +1,21 @@
 import ReservationSummary from "@/components/ReservationSummary";
 import RecoveryOfferCard from "@/components/RecoveryOfferCard";
 import { money, roomName } from "@/lib/api";
-import type { Session, Room, Offer, Move, Reservation } from "@/lib/types";
+import type { Session, Room, Offer, Move, Reservation, Placement } from "@/lib/types";
 
 type Props = {
   session: Session;
   rooms: Room[];
   reservations: Reservation[] | null;
   busy: boolean;
-  onDecision: (offer: Offer, decision: "ACCEPTED") => void;
+  onDecision: (offer: Offer, decision: "ACCEPTED", roomId?: number) => void;
   onCancel: (offer: Offer) => void;
   onMove: (offer: Offer, move: Move) => void;
 };
 
 type OfferSectionProps = Omit<Props, "session"> & {
   moveHistory: Session["moveHistory"];
+  roomAlternatives: Record<number, Placement[]>;
   title: string;
   offers: Offer[];
   urgent: number[];
@@ -25,6 +26,7 @@ function OfferSection({
   showCount,
   offers,
   moveHistory,
+  roomAlternatives,
   rooms,
   reservations,
   urgent,
@@ -52,6 +54,7 @@ function OfferSection({
               urgent={urgent}
               busy={busy}
               moveHistory={moveHistory}
+              alternatives={roomAlternatives[offer.id] ?? []}
               onDecision={onDecision}
               onCancel={onCancel}
               onMove={onMove}
@@ -122,6 +125,7 @@ export default function RecoveryDetails({
         showCount
         offers={pending}
         moveHistory={session.moveHistory}
+        roomAlternatives={session.roomAlternatives ?? {}}
         rooms={rooms}
         reservations={reservations}
         urgent={urgent}
@@ -135,6 +139,7 @@ export default function RecoveryDetails({
           title="처리된 제안"
           offers={decided}
           moveHistory={session.moveHistory}
+          roomAlternatives={session.roomAlternatives ?? {}}
           rooms={rooms}
           reservations={reservations}
           urgent={urgent}

@@ -1,7 +1,8 @@
 "use client";
+import { useState } from "react";
 import ReservationSummary from "@/components/ReservationSummary";
-import { roomName } from "@/lib/api";
-import type { Offer, Room, Move, Reservation } from "@/lib/types";
+import { money, roomName } from "@/lib/api";
+import type { Offer, Room, Move, Reservation, Placement } from "@/lib/types";
 export default function RecoveryOfferCard({
   o,
   rooms,
@@ -9,6 +10,7 @@ export default function RecoveryOfferCard({
   urgent,
   busy,
   moveHistory,
+  alternatives,
   onDecision,
   onCancel,
   onMove,
@@ -19,10 +21,17 @@ export default function RecoveryOfferCard({
   urgent: number[];
   busy: boolean;
   moveHistory: (Move & { reservationId: number })[];
-  onDecision: (offer: Offer, decision: "ACCEPTED") => void;
+  alternatives: Placement[];
+  onDecision: (offer: Offer, decision: "ACCEPTED", roomId?: number) => void;
   onCancel: (offer: Offer) => void;
   onMove: (offer: Offer, move: Move) => void;
 }) {
+  const [roomId, setRoomId] = useState<number>();
+  const selected = alternatives.find((item) => item.segments[0].roomId === roomId);
+  const differentRooms = alternatives.filter((item) =>
+    o.segments.length !== 1 || o.segments[0].roomId !== item.segments[0].roomId,
+  );
+
   function nextMove(o: Offer) {
     return o.plannedMoves.find(
       (m) =>
@@ -66,7 +75,7 @@ export default function RecoveryOfferCard({
         </p>
       )}
       <ul className="segments">
-        {o.segments.map((s, i) => (
+        {(selected?.segments ?? o.segments).map((s, i) => (
           <li key={i}>
             <strong>{roomName(rooms, s.roomId)}</strong>{" "}
             <span className="muted">
@@ -75,7 +84,7 @@ export default function RecoveryOfferCard({
           </li>
         ))}
       </ul>
-      {o.plannedMoves.length > 0 && (
+      {!selected && o.plannedMoves.length > 0 && (
         <p className="footnote">
           계획된 이동:{" "}
           {o.plannedMoves
@@ -86,10 +95,27 @@ export default function RecoveryOfferCard({
             .join(" / ")}
         </p>
       )}
+      {!o.decision && differentRooms.length > 0 && (
+        <label>
+          재배정 객실 직접 선택
+          <select
+            disabled={busy}
+            value={selected ? roomId : ""}
+            onChange={(event) => setRoomId(event.target.value ? Number(event.target.value) : undefined)}
+          >
+            <option value="">추천 일정 사용</option>
+            {differentRooms.map(({ segments, additionalCost }) => (
+              <option key={segments[0].roomId} value={segments[0].roomId}>
+                {roomName(rooms, segments[0].roomId)} · 추가 비용 {money(additionalCost)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {!o.decision && (
         <div className="offer-actions">
-          <button disabled={busy} onClick={() => onDecision(o, "ACCEPTED")}>
-            수락
+          <button disabled={busy} onClick={() => onDecision(o, "ACCEPTED", selected?.segments[0].roomId)}>
+            {selected ? "선택 객실로 수락 기록" : "수락"}
           </button>
           <button
             disabled={busy}

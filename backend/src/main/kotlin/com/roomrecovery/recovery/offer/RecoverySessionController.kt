@@ -33,7 +33,7 @@ class RecoverySessionController(
         @PathVariable offerId: Long,
         @RequestBody request: DecisionRequest
     ): RecoverySessionView {
-        return recoverySessionService.decide(accommodationId, sessionId, offerId, request.decision)
+        return recoverySessionService.decide(accommodationId, sessionId, offerId, request.decision, request.roomId)
     }
 
     @PostMapping("/{sessionId}/offers/{offerId}/moves")

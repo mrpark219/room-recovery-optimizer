@@ -6,6 +6,7 @@ import com.roomrecovery.reservation.Reservation
 import com.roomrecovery.reservation.ReservationStatus
 import com.roomrecovery.reservation.RoomAssignment
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /**
  * 복구 계산은 최적화기에 위임하고, 제안과 응답 및 실제 이동 이력을 관리한다.
@@ -110,6 +111,67 @@ class RecoveryCoordinator(private var input: RecoveryInput) {
         input = input.copy(referenceDate = referenceDate, unavailabilities = unavailabilities.toList())
 
         return replan(referenceDate)
+    }
+
+    fun roomAlternatives(
+        availability: RecoveryInput = input.copy(assignments = currentAssignments)
+    ): Map<Long, List<RecoveryPlacement>> {
+        return offers.filter { it.decision == null }.associate { it.id to alternatives(it, availability) }
+    }
+
+    private fun alternatives(offer: RecoveryOffer, availability: RecoveryInput): List<RecoveryPlacement> {
+        val reservation = availability.reservations.firstOrNull { it.id == offer.reservationId }
+            ?: return emptyList()
+        if (reservation.status == ReservationStatus.CANCELLED) return emptyList()
+
+        val start = maxOf(offer.referenceDate, reservation.startDate)
+        val end = reservation.endDate
+        if (start >= end) return emptyList()
+
+        val types = availability.roomTypes.associateBy { it.id }
+        val bookedType = types[reservation.bookedRoomTypeId] ?: return emptyList()
+        val activeReservations = availability.reservations.filter { it.status != ReservationStatus.CANCELLED }
+            .map { it.id }.toSet()
+        val otherProposals = offers.filter { it.id != offer.id && it.decision == null }.flatMap { it.segments }
+        val nights = ChronoUnit.DAYS.between(start, end)
+
+        return availability.rooms.mapNotNull { room ->
+            val type = types[room.roomTypeId] ?: return@mapNotNull null
+            if (room.accommodationId != reservation.accommodationId ||
+                !type.canAccommodate(bookedType, reservation.guestCount) ||
+                availability.unavailabilities.any { it.overlaps(room.id, start, end) } ||
+                availability.assignments.any {
+                    it.reservationId != reservation.id && it.reservationId in activeReservations &&
+                            it.roomId == room.id && it.startDate < end && start < it.endDate
+                } ||
+                otherProposals.any { it.roomId == room.id && it.startDate < end && start < it.endDate }
+            ) return@mapNotNull null
+
+            RecoveryPlacement(
+                reservation.id, listOf(RecoverySegment(room.id, start, end)),
+                (type.nightlyRate.toLong() - bookedType.nightlyRate).coerceAtLeast(0) * nights,
+                if (offer.initialRoomId != null && offer.initialRoomId != room.id) 1 else 0
+            )
+        }
+    }
+
+    fun selectRoom(offerId: Long, roomId: Long, availability: RecoveryInput) {
+        val offer = findOffer(offerId)
+        check(offer.decision == null) { "이미 응답한 제안입니다" }
+        val placement = alternatives(offer, availability).singleOrNull { it.segments.single().roomId == roomId }
+            ?: throw RecoveryConflict("선택한 객실을 남은 숙박 전체에 배정할 수 없습니다. 다른 객실을 선택해 주세요.")
+        currentOffers[offer.reservationId] =
+            RecoveryOffer(offer.id, offer.reservationId, offer.referenceDate, offer.initialRoomId, placement.segments)
+        plan = plan?.let { current ->
+            val placements = current.placements.map { if (it.reservationId == offer.reservationId) placement else it }
+            current.copy(
+                placements = placements,
+                score = current.score.copy(
+                    additionalCost = placements.sumOf { it.additionalCost },
+                    moves = placements.sumOf { it.moves }
+                )
+            )
+        }
     }
 
     /** 현재 유효한 전체 제안에 대해서만 응답한다. */

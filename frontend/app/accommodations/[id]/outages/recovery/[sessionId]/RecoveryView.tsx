@@ -77,6 +77,7 @@ export default function Recovery({
   async function updateOffer(
     offer: Offer,
     action: "ACCEPTED" | "CANCEL_REQUESTED" | Move,
+    roomId?: number,
   ) {
     if (busy) {
       return;
@@ -89,7 +90,7 @@ export default function Recovery({
         `${path}/offers/${offer.id}/${move ? "moves" : "decision"}`,
         {
           method: "POST",
-          body: JSON.stringify(move ? action : { decision: action }),
+          body: JSON.stringify(move ? action : { decision: action, roomId }),
         },
       );
       setSession(result);
