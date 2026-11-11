@@ -7,6 +7,10 @@ export default function OutageList({
   error,
   onEdit,
   onDelete,
+  onViewReservations,
+  editing,
+  selectedId,
+  editForm,
 }: {
   outages: Outage[] | null;
   rooms: Room[];
@@ -14,6 +18,10 @@ export default function OutageList({
   error: string;
   onEdit: (o: Outage) => void;
   onDelete: (o: Outage) => void;
+  onViewReservations: (o: Outage) => void;
+  editing: number | null;
+  selectedId: number | null;
+  editForm: React.ReactNode;
 }) {
   return outages === null ? (
     <p className="message">
@@ -25,17 +33,19 @@ export default function OutageList({
     <p className="message">등록된 객실 장애가 없습니다.</p>
   ) : (
     <div className="outage-list">
-      {outages.map((o) => (
+      {outages.map((o) => o.id === editing ? (
+        <div key={o.id}>{editForm}</div>
+      ) : (
         <div className="outage-row" key={o.id}>
           <div>
-            <strong>{roomName(rooms, o.roomId)}</strong>
+            <strong>{roomName(rooms, o.roomId)}</strong> {selectedId === o.id && <span className="badge">조회 중</span>}
             <p>
-              {o.startDate} ~ {o.endDate}{" "}
-              <span className="muted">· 종료일 미포함</span>
+              {o.startDate} ~ {o.endDate}
             </p>
             <p className="muted">{o.reason}</p>
           </div>
           <div className="row-actions">
+            <button className="secondary small" onClick={() => onViewReservations(o)}>기간 예약 보기</button>
             <button
               className="secondary small"
               disabled={busy}

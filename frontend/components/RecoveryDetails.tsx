@@ -1,10 +1,12 @@
+import ReservationSummary from "@/components/ReservationSummary";
 import RecoveryOfferCard from "@/components/RecoveryOfferCard";
 import { money, roomName } from "@/lib/api";
-import type { Session, Room, Offer, Move } from "@/lib/types";
+import type { Session, Room, Offer, Move, Reservation } from "@/lib/types";
 
 type Props = {
   session: Session;
   rooms: Room[];
+  reservations: Reservation[] | null;
   busy: boolean;
   onDecision: (offer: Offer, decision: "ACCEPTED") => void;
   onCancel: (offer: Offer) => void;
@@ -24,6 +26,7 @@ function OfferSection({
   offers,
   moveHistory,
   rooms,
+  reservations,
   urgent,
   busy,
   onDecision,
@@ -45,6 +48,7 @@ function OfferSection({
               key={offer.id}
               o={offer}
               rooms={rooms}
+              reservation={reservations?.find((r) => r.id === offer.reservationId)}
               urgent={urgent}
               busy={busy}
               moveHistory={moveHistory}
@@ -64,6 +68,7 @@ function OfferSection({
 export default function RecoveryDetails({
   session,
   rooms,
+  reservations,
   busy,
   onDecision,
   onCancel,
@@ -85,23 +90,22 @@ export default function RecoveryDetails({
           <div>
             <h2>재배정 현황</h2>
             <p>
-              기준일 {session.referenceDate} · 종료일은 숙박에 포함되지
-              않습니다.
+              기준일 {session.referenceDate}
             </p>
           </div>
         </div>
         {session.plan ? (
           <div className="metrics">
-            <div>
-              <span>긴급 예약</span>
+            <div className="metric-urgent">
+              <span>당일 변경 필요</span>
               <strong>{session.plan.urgentReservationIds.length}건</strong>
             </div>
             <div>
-              <span>배정 가능</span>
+              <span>대체 객실 찾음</span>
               <strong>{session.plan.score.served}건</strong>
             </div>
             <div>
-              <span>미해결</span>
+              <span>대체 객실 없음</span>
               <strong>{session.plan.unresolvedReservationIds.length}건</strong>
             </div>
             <div>
@@ -119,6 +123,7 @@ export default function RecoveryDetails({
         offers={pending}
         moveHistory={session.moveHistory}
         rooms={rooms}
+        reservations={reservations}
         urgent={urgent}
         busy={busy}
         onDecision={onDecision}
@@ -131,6 +136,7 @@ export default function RecoveryDetails({
           offers={decided}
           moveHistory={session.moveHistory}
           rooms={rooms}
+          reservations={reservations}
           urgent={urgent}
           busy={busy}
           onDecision={onDecision}
@@ -158,20 +164,21 @@ export default function RecoveryDetails({
         <section className="card">
           <div className="section-heading">
             <div>
-              <h2>미해결 예약</h2>
+              <h2>대체 객실을 찾지 못한 예약</h2>
             </div>
           </div>
-          <p>
-            {session.plan.unresolvedReservationIds.map((reservationId) => (
-              <span key={reservationId}>
-                #{reservationId}{" "}
-                {urgent.includes(reservationId) && (
-                  <span className="badge urgent">긴급</span>
-                )}{" "}
-                &nbsp;{" "}
-              </span>
-            ))}
-          </p>
+          {session.plan.unresolvedReservationIds.map((reservationId) => (
+            <div className="history-row" key={reservationId}>
+              <strong>예약 #{reservationId}</strong>{" "}
+              {urgent.includes(reservationId) && (
+                <span className="badge urgent">기준일에 이동 필요</span>
+              )}
+              <ReservationSummary
+                reservation={reservations?.find((r) => r.id === reservationId)}
+                rooms={rooms}
+              />
+            </div>
+          ))}
         </section>
       )}
     </>

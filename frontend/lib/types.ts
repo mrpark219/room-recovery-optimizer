@@ -1,5 +1,5 @@
 export type Accommodation = { id: number; name: string };
-export type Room = { id: number; name: string };
+export type Room = { id: number; name: string; roomTypeName: string; capacity: number; nightlyRate: number };
 export type Segment = { roomId: number; startDate: string; endDate: string };
 export type Reservation = {
   id: number;
@@ -7,6 +7,7 @@ export type Reservation = {
   endDate: string;
   status: "CONFIRMED" | "CHECKED_IN" | "CANCELLED";
   roomTypeName: string;
+  guestCount: number;
   assignments: Segment[];
 };
 export type Outage = Segment & { id: number; reason: string };

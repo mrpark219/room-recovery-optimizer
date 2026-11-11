@@ -37,11 +37,11 @@ class ReservationListServiceTest {
         ))
 
         assertEquals(listOf(
-            ReservationListItem(1, start, end, ReservationStatus.CHECKED_IN, "Standard", listOf(
+            ReservationListItem(1, start, end, ReservationStatus.CHECKED_IN, "Standard", 2, listOf(
                 ReservationAssignmentItem(101, start, start.plusDays(1)),
                 ReservationAssignmentItem(102, start.plusDays(1), end)
             )),
-            ReservationListItem(2, start, end, ReservationStatus.CANCELLED, "Standard", emptyList())
+            ReservationListItem(2, start, end, ReservationStatus.CANCELLED, "Standard", 2, emptyList())
         ), service.list(3))
     }
 

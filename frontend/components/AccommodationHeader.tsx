@@ -6,7 +6,7 @@ export default function AccommodationHeader({
 }: {
   id: string;
   name: string;
-  tab: "reservations" | "outages";
+  tab: "rooms" | "reservations" | "outages";
 }) {
   return (
     <>
@@ -16,9 +16,16 @@ export default function AccommodationHeader({
       <h1>{name || "숙소 관리"}</h1>
       <nav className="tabs" aria-label="숙소 관리">
         <Link
+          className={tab === "rooms" ? "active" : ""}
+          aria-current={tab === "rooms" ? "page" : undefined}
+          href={`/accommodations/${id}`}
+        >
+          객실 목록
+        </Link>
+        <Link
           className={tab === "reservations" ? "active" : ""}
           aria-current={tab === "reservations" ? "page" : undefined}
-          href={`/accommodations/${id}`}
+          href={`/accommodations/${id}/reservations`}
         >
           예약 내역
         </Link>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import ImpactPreview from "@/components/ImpactPreview";
-import type { Calculation } from "@/lib/types";
+import type { Calculation, Reservation, Room } from "@/lib/types";
 
 type Props = {
   id: string;
@@ -10,6 +10,8 @@ type Props = {
   checkingSession: boolean;
   sessionCheckFailed: boolean;
   preview: Calculation | null;
+  reservations: Reservation[] | null;
+  rooms: Room[];
   onDateChange: (date: string) => void;
   onPreview: () => void;
   onStart: () => void;
@@ -24,6 +26,8 @@ export default function RecoveryControls({
   checkingSession,
   sessionCheckFailed,
   preview,
+  reservations,
+  rooms,
   onDateChange,
   onPreview,
   onStart,
@@ -37,6 +41,15 @@ export default function RecoveryControls({
     !preview ||
     preview.placements.length === 0;
 
+  const reason = busy ? "처리 중입니다."
+    : !referenceDate ? "재배정 기준일을 선택하세요."
+    : checkingSession ? "진행 중인 세션을 확인하고 있습니다."
+    : sessionCheckFailed ? "진행 중인 세션을 다시 확인하세요."
+    : !preview ? "먼저 변경이 필요한 예약을 찾으세요."
+    : preview.affectedReservations.length === 0 ? "기준일부터 객실 변경이 필요한 예약이 없습니다."
+    : preview.placements.length === 0 ? "남은 숙박 기간에 배정할 수 있는 대체 객실을 찾지 못했습니다."
+    : "";
+
   return (
     <section className="card">
       <div className="section-heading">
@@ -46,7 +59,7 @@ export default function RecoveryControls({
       </div>
       <div className="preview-controls">
         <label>
-          기준일
+          재배정 기준일
           <input
             type="date"
             disabled={busy}
@@ -59,7 +72,7 @@ export default function RecoveryControls({
           disabled={busy || !referenceDate}
           onClick={onPreview}
         >
-          영향 미리보기
+          변경이 필요한 예약 찾기
         </button>
         {savedSession ? (
           <Link
@@ -70,10 +83,12 @@ export default function RecoveryControls({
           </Link>
         ) : (
           <button disabled={startDisabled} onClick={onStart}>
-            재배정 시작
+            재배정 제안 검토 시작
           </button>
         )}
       </div>
+      <p className="footnote">이 날짜부터 남은 숙박의 대체 객실을 계산합니다.</p>
+      {!savedSession && reason && <p className="footnote" role="status">{reason}</p>}
       {sessionCheckFailed && (
         <p role="alert" className="error">
           저장된 세션을 확인하지 못했습니다.{" "}
@@ -88,7 +103,7 @@ export default function RecoveryControls({
           장애와 겹치면 배정안을 다시 계산합니다.
         </p>
       )}
-      {preview && <ImpactPreview preview={preview} />}
+      {preview && <ImpactPreview preview={preview} reservations={reservations} rooms={rooms} />}
     </section>
   );
 }

@@ -312,9 +312,13 @@ select:focus {
   margin-top: 24px;
   padding-top: 22px;
 }
+.preview,
+.card:has(> .metrics) {
+  container-type: inline-size;
+}
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 .metrics > div {
@@ -327,6 +331,11 @@ select:focus {
   color: #8b929a;
   font-size: 12px;
   margin-bottom: 9px;
+  word-break: keep-all;
+}
+.metrics .metric-urgent span,
+.metrics .metric-urgent strong {
+  color: #b42318;
 }
 .metrics strong {
   font-size: 20px;
@@ -402,9 +411,6 @@ select:focus {
   .wide,
   .form-actions {
     grid-column: auto;
-  }
-  .metrics {
-    grid-template-columns: repeat(2, 1fr);
   }
   .offer-grid {
     grid-template-columns: 1fr;
@@ -545,10 +551,6 @@ button:focus-visible {
     color: #737982;
     font-size: 12px;
   }
-  .metrics > div:nth-child(3) {
-    border-left: 0;
-    padding-left: 0;
-  }
 }
 @media (max-width: 650px) {
   .reservation-card td .badge {
@@ -560,4 +562,92 @@ button:focus-visible {
   font-size: 12px;
   font-weight: 500;
   margin: 0;
+}
+
+.operations-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.85fr);
+  align-items: start;
+  gap: 16px;
+}
+.operations-layout > * {
+  min-width: 0;
+}
+.schedule-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.schedule-comparison > div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .schedule-comparison {
+    grid-template-columns: 1fr;
+  }
+}
+.context-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.context-controls label {
+  flex: 1 1 160px;
+}
+.compact-reservations .table-wrap { overflow: visible; }
+.compact-reservations table,
+.compact-reservations tbody,
+.compact-reservations tr,
+.compact-reservations td { display: block; }
+.compact-reservations thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.compact-reservations tr {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.compact-reservations td {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 8px;
+  padding: 3px 0;
+  border: 0;
+  white-space: normal;
+}
+.compact-reservations td::before {
+  content: attr(data-label);
+  color: #737982;
+  font-size: 12px;
+}
+.compact-reservations td .badge { justify-self: start; }
+@media (max-width: 850px) {
+  .operations-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+
+@container (max-width: 34rem) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .metrics > div:nth-child(odd) {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
+
+@container (max-width: 15rem) {
+  .metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .metrics > div {
+    border-left: 0;
+    padding-left: 0;
+  }
 }

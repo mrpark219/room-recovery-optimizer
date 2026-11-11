@@ -68,7 +68,7 @@ export default function OutageForm({
         />
       </label>
       <label>
-        종료일 (미포함)
+        종료일
         <input
           required
           type="date"

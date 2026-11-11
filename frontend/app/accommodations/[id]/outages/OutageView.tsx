@@ -4,6 +4,8 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import OutageList from "@/components/OutageList";
 import RecoveryControls from "@/components/RecoveryControls";
 import OutageForm from "@/components/OutageForm";
+import useReservations from "@/components/useReservations";
+import ReservationContext from "@/components/ReservationContext";
 import AccommodationHeader from "@/components/AccommodationHeader";
 import { useRouter } from "next/navigation";
 import { api, ApiError, base, roomName, today, sessionKey } from "@/lib/api";
@@ -13,6 +15,7 @@ const blank = { roomId: "", startDate: "", endDate: "", reason: "" };
 
 export default function OutageView({ id }: { id: string }) {
   const router = useRouter();
+  const booking = useReservations(id);
   const [name, setName] = useState("");
   const [rooms, setRooms] = useState<Room[]>([]);
   const [outages, setOutages] = useState<Outage[] | null>(null);
@@ -21,6 +24,7 @@ export default function OutageView({ id }: { id: string }) {
   const [readError, setReadError] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const [selectedOutage, setSelectedOutage] = useState<Outage | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Outage | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [form, setForm] = useState(blank);
@@ -94,7 +98,7 @@ export default function OutageView({ id }: { id: string }) {
     setError("");
     setReadError(false);
     try {
-      await api(
+      const saved = await api<Outage>(
         `${base(id)}/unavailabilities${editing === null ? "" : `/${editing}`}`,
         {
           method: editing === null ? "POST" : "PUT",
@@ -105,6 +109,7 @@ export default function OutageView({ id }: { id: string }) {
       setEditing(null);
       setShowForm(false);
       setPreview(null);
+      setSelectedOutage(saved);
       await load();
     } catch (error) {
       setFormError((error as Error).message);
@@ -125,6 +130,7 @@ export default function OutageView({ id }: { id: string }) {
         method: "DELETE",
       });
       setPreview(null);
+      setSelectedOutage(null);
       await load();
     } catch (error) {
       setError((error as Error).message);
@@ -196,6 +202,7 @@ export default function OutageView({ id }: { id: string }) {
 
   function editOutage(outage: Outage) {
     setFormError("");
+    setSelectedOutage(null);
     setEditing(outage.id);
     setForm({
       roomId: String(outage.roomId),
@@ -216,6 +223,7 @@ export default function OutageView({ id }: { id: string }) {
   function updateForm(value: typeof form) {
     setFormError("");
     setForm(value);
+    setSelectedOutage(null);
   }
 
   function confirmDelete() {
@@ -249,51 +257,78 @@ export default function OutageView({ id }: { id: string }) {
           )}
         </div>
       )}
-      <section className="card">
-        <div className="section-heading">
-          <div>
-            <h2>객실 장애</h2>
-            <p>이용할 수 없는 객실과 기간을 등록하세요.</p>
-          </div>
-          <button onClick={toggleForm}>
-            {showForm ? "닫기" : "장애 등록"}
-          </button>
-        </div>
-        {showForm && (
-          <OutageForm
-            key={editing ?? "new"}
-            form={form}
-            setForm={updateForm}
-            serverError={formError}
-            rooms={rooms}
+      <div className="operations-layout">
+        <div>
+          <section className="card">
+            <div className="section-heading">
+              <div>
+                <h2>객실 장애</h2>
+                <p>이용할 수 없는 객실과 기간을 등록하세요.</p>
+              </div>
+              {!showForm && <button onClick={toggleForm}>장애 등록</button>}
+            </div>
+            {showForm && editing === null && (
+              <OutageForm
+                key={editing ?? "new"}
+                form={form}
+                setForm={updateForm}
+                serverError={formError}
+                rooms={rooms}
+                busy={busy}
+                editing={editing}
+                save={save}
+                close={() => setShowForm(false)}
+              />
+            )}
+            <OutageList
+              outages={outages}
+              rooms={rooms}
+              busy={busy}
+              error={error}
+              editing={editing}
+              selectedId={selectedOutage?.id ?? null}
+              editForm={showForm && editing !== null ? (
+                <OutageForm key={editing} form={form} setForm={updateForm} serverError={formError}
+                  rooms={rooms} busy={busy} editing={editing} save={save}
+                  close={() => { setShowForm(false); setEditing(null); }} />
+              ) : null}
+              onEdit={editOutage}
+              onDelete={setDeleteTarget}
+              onViewReservations={(outage) => {
+                setShowForm(false);
+                setEditing(null);
+                setSelectedOutage({ ...outage });
+                document.getElementById("reservation-context")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            />
+          </section>
+          <RecoveryControls
+            id={id}
+            referenceDate={referenceDate}
             busy={busy}
-            editing={editing}
-            save={save}
-            close={() => setShowForm(false)}
+            savedSession={savedSession}
+            checkingSession={checkingSession}
+            sessionCheckFailed={sessionCheckFailed}
+            preview={preview}
+            reservations={booking.reservations}
+            rooms={rooms}
+            onDateChange={changeReferenceDate}
+            onPreview={previewImpact}
+            onStart={startRecovery}
+            onCheckSession={checkSession}
           />
-        )}
-        <OutageList
-          outages={outages}
+        </div>
+        <ReservationContext
           rooms={rooms}
-          busy={busy}
-          error={error}
-          onEdit={editOutage}
-          onDelete={setDeleteTarget}
+          reservations={booking.reservations}
+          error={booking.error}
+          onReload={booking.load}
+          outages={outages || []}
+          selected={selectedOutage}
+          draft={showForm && form.roomId && form.startDate && form.endDate && form.startDate < form.endDate
+            ? { roomId: Number(form.roomId), startDate: form.startDate, endDate: form.endDate } : null}
         />
-      </section>
-      <RecoveryControls
-        id={id}
-        referenceDate={referenceDate}
-        busy={busy}
-        savedSession={savedSession}
-        checkingSession={checkingSession}
-        sessionCheckFailed={sessionCheckFailed}
-        preview={preview}
-        onDateChange={changeReferenceDate}
-        onPreview={previewImpact}
-        onStart={startRecovery}
-        onCheckSession={checkSession}
-      />
+      </div>
     </div>
   );
 }

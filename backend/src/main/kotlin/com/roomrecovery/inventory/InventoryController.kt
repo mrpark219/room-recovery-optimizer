@@ -14,7 +14,7 @@ class InventoryController(private val inventoryService: InventoryService) {
     }
 
     @GetMapping("/{accommodationId}/rooms")
-    fun rooms(@PathVariable accommodationId: Long): List<Room> {
+    fun rooms(@PathVariable accommodationId: Long): List<RoomListItem> {
         return inventoryService.rooms(accommodationId)
     }
 }

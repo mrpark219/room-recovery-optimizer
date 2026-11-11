@@ -3,9 +3,11 @@ import type { Room, Reservation } from "@/lib/types";
 export default function ReservationTable({
   reservations,
   rooms,
+  affectedIds = [],
 }: {
   reservations: Reservation[];
   rooms: Room[];
+  affectedIds?: number[];
 }) {
   return (
     <div className="table-wrap">
@@ -15,6 +17,7 @@ export default function ReservationTable({
             <th role="columnheader">예약 번호</th>
             <th role="columnheader">숙박 기간</th>
             <th role="columnheader">객실 유형</th>
+            <th role="columnheader">인원</th>
             <th role="columnheader">객실 배정</th>
             <th role="columnheader">상태</th>
           </tr>
@@ -23,7 +26,9 @@ export default function ReservationTable({
           {reservations.map((r) => (
             <tr key={r.id} role="row">
               <td role="cell" data-label="예약 번호">
-                #{r.id}
+                <div>
+                  #{r.id} {affectedIds.includes(r.id) && <span className="badge urgent">장애 겹침</span>}
+                </div>
               </td>
               <td role="cell" data-label="숙박 기간">
                 {r.startDate} ~ {r.endDate}
@@ -31,7 +36,9 @@ export default function ReservationTable({
               <td role="cell" data-label="객실 유형">
                 {r.roomTypeName}
               </td>
+              <td role="cell" data-label="인원">{r.guestCount}명</td>
               <td role="cell" data-label="객실 배정">
+                <div>
                 {r.assignments.length
                   ? r.assignments.map((s, i) => (
                       <div key={i}>
@@ -48,6 +55,7 @@ export default function ReservationTable({
                       </div>
                     ))
                   : "미배정"}
+                </div>
               </td>
               <td role="cell" data-label="상태">
                 <span className="badge">{statusName(r.status)}</span>

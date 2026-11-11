@@ -13,6 +13,7 @@ data class ReservationListItem(
     val endDate: LocalDate,
     val status: ReservationStatus,
     val roomTypeName: String,
+    val guestCount: Int,
     val assignments: List<ReservationAssignmentItem>
 )
 
@@ -42,6 +43,7 @@ class ReservationListService(
                 roomTypeName = checkNotNull(typesById[reservation.bookedRoomTypeId]) {
                     "예약의 객실 유형을 찾을 수 없습니다: ${reservation.id}"
                 }.name,
+                guestCount = reservation.guestCount,
                 assignments = assignmentsByReservation[reservation.id].orEmpty().map {
                     ReservationAssignmentItem(it.roomId, it.startDate, it.endDate)
                 }

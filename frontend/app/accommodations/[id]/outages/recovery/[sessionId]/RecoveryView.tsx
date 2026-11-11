@@ -2,10 +2,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import useReservations from "@/components/useReservations";
+import ReservationContext from "@/components/ReservationContext";
 import RecoveryDetails from "@/components/RecoveryDetails";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { api, ApiError, base, sessionKey } from "@/lib/api";
-import type { Room, Session, Offer, Move } from "@/lib/types";
+import type { Room, Session, Offer, Move, Outage } from "@/lib/types";
 
 export default function Recovery({
   id,
@@ -18,6 +20,10 @@ export default function Recovery({
   const [finishing, setFinishing] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [reservationRevision, setReservationRevision] = useState(0);
+  const booking = useReservations(id, reservationRevision);
+  const [outages, setOutages] = useState<Outage[]>([]);
+  const [outageError, setOutageError] = useState("");
 
   const [error, setError] = useState("");
   const [expired, setExpired] = useState(false);
@@ -53,9 +59,20 @@ export default function Recovery({
     }
   }, [id, path, sessionId]);
 
+  const loadOutages = useCallback(async () => {
+    setOutageError("");
+    try {
+      setOutages(await api<Outage[]>(`${base(id)}/unavailabilities`));
+    } catch (error) {
+      setOutages([]);
+      setOutageError((error as Error).message);
+    }
+  }, [id]);
+
   useEffect(() => {
-    load();
-  }, [load]);
+    void load();
+    void loadOutages();
+  }, [load, loadOutages]);
 
   async function updateOffer(
     offer: Offer,
@@ -76,6 +93,7 @@ export default function Recovery({
         },
       );
       setSession(result);
+      if (!move) setReservationRevision((revision) => revision + 1);
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         setError(
@@ -118,7 +136,7 @@ export default function Recovery({
       {finishing && session && (
         <ConfirmDialog
           title="복구 세션 종료"
-          message={`세션을 종료하시겠습니까?${unresolvedCount ? ` 미해결 예약 ${unresolvedCount}건은 미해결 상태로 남습니다.` : ""}${session.moveHistory.length ? " 이동 완료 내역은 종료 후 조회할 수 없습니다." : ""}`}
+          message={`세션을 종료하시겠습니까?${unresolvedCount ? ` 대체 객실을 찾지 못한 예약 ${unresolvedCount}건은 별도 대응이 필요합니다.` : ""}${session.moveHistory.length ? " 이동 완료 내역은 종료 후 조회할 수 없습니다." : ""}`}
           confirmLabel="세션 종료"
           onClose={() => setFinishing(false)}
           onConfirm={() => void finish()}
@@ -145,7 +163,11 @@ export default function Recovery({
         <div role="alert" className="notice error">
           {error}{" "}
           {!expired && (
-            <button className="text-button" onClick={load} disabled={busy}>
+            <button className="text-button" onClick={() => {
+              void load();
+              void loadOutages();
+              setReservationRevision((revision) => revision + 1);
+            }} disabled={busy}>
               다시 불러오기
             </button>
           )}
@@ -156,14 +178,39 @@ export default function Recovery({
       )}
       {session && (
         <>
-          <RecoveryDetails
-            session={session}
-            rooms={rooms}
-            busy={busy}
-            onDecision={updateOffer}
-            onCancel={setCancelTarget}
-            onMove={updateOffer}
-          />
+          <a className="back" href="#reservation-context">예약 조회 기간으로 이동 ↓</a>
+          <div className="operations-layout">
+            <div>
+              <RecoveryDetails
+                session={session}
+                reservations={booking.reservations}
+                rooms={rooms}
+                busy={busy}
+                onDecision={updateOffer}
+                onCancel={setCancelTarget}
+                onMove={updateOffer}
+              />
+            </div>
+            <div>
+              {outageError && (
+                <div className="notice error" role="alert">
+                  장애 정보를 불러오지 못해 장애 겹침을 표시할 수 없습니다. {outageError}{" "}
+                  <button className="text-button" onClick={loadOutages}>다시 불러오기</button>
+                </div>
+              )}
+              <ReservationContext
+                rooms={rooms}
+                reservations={booking.reservations}
+                error={booking.error}
+                onReload={booking.load}
+                outages={outages}
+                referenceDate={session.referenceDate}
+                initialEnd={session.offers
+                  .flatMap((offer) => offer.segments.map((segment) => segment.endDate))
+                  .sort().at(-1)}
+              />
+            </div>
+          </div>
           <section className="card">
             {session.finishBlockedReason && <p>{session.finishBlockedReason}</p>}
             <button

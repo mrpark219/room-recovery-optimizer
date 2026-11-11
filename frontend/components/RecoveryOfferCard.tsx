@@ -1,9 +1,11 @@
 "use client";
+import ReservationSummary from "@/components/ReservationSummary";
 import { roomName } from "@/lib/api";
-import type { Offer, Room, Move } from "@/lib/types";
+import type { Offer, Room, Move, Reservation } from "@/lib/types";
 export default function RecoveryOfferCard({
   o,
   rooms,
+  reservation,
   urgent,
   busy,
   moveHistory,
@@ -13,6 +15,7 @@ export default function RecoveryOfferCard({
 }: {
   o: Offer;
   rooms: Room[];
+  reservation?: Reservation;
   urgent: number[];
   busy: boolean;
   moveHistory: (Move & { reservationId: number })[];
@@ -33,13 +36,15 @@ export default function RecoveryOfferCard({
     );
   }
   const next = o.decision === "ACCEPTED" ? nextMove(o) : undefined;
+  const completedMoves = moveHistory.filter((move) => move.reservationId === o.reservationId);
+  const lastCompletedMove = completedMoves.at(-1);
   return (
     <article className="offer" key={o.id}>
       <div className="offer-top">
         <h3>예약 #{o.reservationId}</h3>
         <div>
           {urgent.includes(o.reservationId) && (
-            <span className="badge urgent">긴급</span>
+            <span className="badge urgent">기준일에 이동 필요</span>
           )}{" "}
           <span className="badge">
             {o.decision === "ACCEPTED"
@@ -50,9 +55,14 @@ export default function RecoveryOfferCard({
           </span>
         </div>
       </div>
-      {o.initialRoomId !== null && (
+      <ReservationSummary reservation={reservation} rooms={rooms} />
+      {lastCompletedMove ? (
         <p className="muted">
-          현재 투숙 객실 {roomName(rooms, o.initialRoomId)}
+          마지막 이동 완료 객실 {roomName(rooms, lastCompletedMove.toRoomId)}
+        </p>
+      ) : o.initialRoomId !== null && (
+        <p className="muted">
+          재배정 기준일의 투숙 객실 {roomName(rooms, o.initialRoomId)}
         </p>
       )}
       <ul className="segments">
