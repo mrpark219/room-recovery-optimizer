@@ -47,7 +47,7 @@ class RecoverySessionServiceTest {
         `when`(assignments.findAllByAccommodationIdAndReservationIdAndEndDateAfter(1, 1, date)).thenReturn(listOf(old))
         doThrow(IllegalStateException("DB 오류")).`when`(assignments).flush()
 
-        val service = RecoverySessionService(recovery, reservations, assignments, outages, TransactionTemplate(manager))
+        val service = RecoverySessionService(recovery, reservations, assignments, outages, TransactionTemplate(manager), mock(RecoveryHistory::class.java))
         val session = service.create(1, date)
         val offerId = session.offers.single().id
 
@@ -86,7 +86,7 @@ class RecoverySessionServiceTest {
         `when`(manager.getTransaction(any())).thenReturn(status)
         `when`(reservations.findById(1)).thenReturn(Optional.of(reservation))
         `when`(outages.findRemainingInAccommodation(1, date)).thenReturn(listOf(initialOutage, newOutage))
-        val service = RecoverySessionService(recovery, reservations, assignments, outages, TransactionTemplate(manager))
+        val service = RecoverySessionService(recovery, reservations, assignments, outages, TransactionTemplate(manager), mock(RecoveryHistory::class.java))
         val session = service.create(1, date)
         val oldOffer = session.offers.single()
         assertEquals(2L, oldOffer.segments.single().roomId)
@@ -121,7 +121,7 @@ class RecoverySessionServiceTest {
         `when`(recovery.loadInput(1, date)).thenReturn(input)
         `when`(manager.getTransaction(any())).thenReturn(mock(TransactionStatus::class.java))
         `when`(reservations.findById(1)).thenReturn(Optional.of(reservation))
-        val service = RecoverySessionService(recovery, reservations, assignments, outages, TransactionTemplate(manager))
+        val service = RecoverySessionService(recovery, reservations, assignments, outages, TransactionTemplate(manager), mock(RecoveryHistory::class.java))
         val session = service.create(1, date)
         val offer = session.offers.single()
         assertThrows(NotFound::class.java) { service.finish(1, "wrong") }

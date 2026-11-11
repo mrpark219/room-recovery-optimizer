@@ -121,7 +121,7 @@ export default function Recovery({
       if (localStorage.getItem(sessionKey(id)) === sessionId) {
         localStorage.removeItem(sessionKey(id));
       }
-      router.replace(`/accommodations/${id}/outages`);
+      router.replace(`/accommodations/${id}/outages/history`);
     } catch (error) {
       setError((error as Error).message);
     } finally {
@@ -136,7 +136,7 @@ export default function Recovery({
       {finishing && session && (
         <ConfirmDialog
           title="복구 세션 종료"
-          message={`세션을 종료하시겠습니까?${unresolvedCount ? ` 대체 객실을 찾지 못한 예약 ${unresolvedCount}건은 별도 대응이 필요합니다.` : ""}${session.moveHistory.length ? " 이동 완료 내역은 종료 후 조회할 수 없습니다." : ""}`}
+          message={`세션을 종료하시겠습니까?${unresolvedCount ? ` 대체 객실을 찾지 못한 예약 ${unresolvedCount}건은 별도 대응이 필요합니다.` : ""} 처리 결과는 복구 이력에서 볼 수 있습니다.`}
           confirmLabel="세션 종료"
           onClose={() => setFinishing(false)}
           onConfirm={() => void finish()}

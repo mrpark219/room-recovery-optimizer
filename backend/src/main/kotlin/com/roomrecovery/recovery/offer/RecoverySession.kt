@@ -6,5 +6,7 @@ internal data class RecoverySession(
     val id: String,
     val accommodationId: Long,
     val date: LocalDate,
-    var coordinator: RecoveryCoordinator
+    var coordinator: RecoveryCoordinator,
+    val roomNames: Map<Long, String>,
+    val incidents: List<RecoveryIncident>
 )

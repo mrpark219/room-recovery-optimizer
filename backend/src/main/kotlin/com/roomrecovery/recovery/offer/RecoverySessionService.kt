@@ -17,7 +17,8 @@ class RecoverySessionService(
     private val reservations: ReservationRepository,
     private val assignments: RoomAssignmentRepository,
     private val unavailabilities: RoomUnavailabilityRepository,
-    private val transaction: TransactionTemplate
+    private val transaction: TransactionTemplate,
+    private val history: RecoveryHistory
 ) {
 
     private val sessions = mutableMapOf<Long, RecoverySession>()
@@ -28,9 +29,14 @@ class RecoverySessionService(
             throw RecoveryConflict("이미 진행 중인 복구 세션이 있습니다")
         }
 
-        val coordinator = RecoveryCoordinator(recoveryService.loadInput(accommodationId, date)).copy()
+        val input = recoveryService.loadInput(accommodationId, date)
+        val coordinator = RecoveryCoordinator(input).copy()
         coordinator.replan()
-        val session = RecoverySession(UUID.randomUUID().toString(), accommodationId, date, coordinator)
+        val roomNames = input.rooms.associate { it.id to it.name }
+        val incidents = input.unavailabilities.map {
+            RecoveryIncident(roomNames[it.roomId] ?: "객실 ${it.roomId}", it.startDate, it.endDate, it.reason)
+        }
+        val session = RecoverySession(UUID.randomUUID().toString(), accommodationId, date, coordinator, roomNames, incidents)
         sessions[accommodationId] = session
 
         return view(session)
@@ -83,6 +89,9 @@ class RecoverySessionService(
             val old = assignments.findAllByAccommodationIdAndReservationIdAndEndDateAfter(
                 accommodationId, offer.reservationId, offer.referenceDate
             )
+            val previousSchedule = old.map {
+                schedule(session, it.roomId, it.startDate, it.endDate)
+            }
             old.forEach { assignment ->
                 if (assignment.startDate < offer.referenceDate) {
                     assignment.shorten(offer.referenceDate)
@@ -94,6 +103,12 @@ class RecoverySessionService(
 
             val newSegments = candidate.assignments.filter { it.reservationId == offer.reservationId && it.id == 0L }
             assignments.saveAllAndFlush(newSegments)
+            history.record(session, decision.name, mapOf(
+                "reservationId" to reservation.id,
+                "previousSchedule" to previousSchedule,
+                "confirmedSchedule" to newSegments.map { schedule(session, it.roomId, it.startDate, it.endDate) },
+                "incidents" to session.incidents
+            ))
             null
         }
         if (conflictingOutages != null) {
@@ -114,22 +129,43 @@ class RecoverySessionService(
             throw NotFound("유효한 제안을 찾을 수 없습니다")
         }
 
-        try {
-            session.coordinator.completeMove(offerId, request.date, request.fromRoomId, request.toRoomId)
+        val candidate = session.coordinator.copy()
+        val completed = try {
+            candidate.completeMove(offerId, request.date, request.fromRoomId, request.toRoomId)
         } catch (e: IllegalStateException) {
             throw RecoveryConflict(e.message ?: "이동을 기록할 수 없습니다")
         } catch (e: IllegalArgumentException) {
             throw RecoveryConflict(e.message ?: "이동을 기록할 수 없습니다")
         }
 
+        history.record(session, "MOVE_COMPLETED", mapOf(
+            "reservationId" to completed.reservationId,
+            "date" to completed.date,
+            "fromRoomName" to (session.roomNames[completed.fromRoomId] ?: "객실 ${completed.fromRoomId}"),
+            "toRoomName" to (session.roomNames[completed.toRoomId] ?: "객실 ${completed.toRoomId}")
+        ))
+        session.coordinator = candidate
         return view(session)
     }
 
     @Synchronized
     fun finish(accommodationId: Long, sessionId: String) {
-        val coordinator = session(accommodationId, sessionId).coordinator
+        val session = session(accommodationId, sessionId)
+        val coordinator = session.coordinator
         coordinator.finishBlockedReason()?.let { throw RecoveryConflict(it) }
+        history.record(session, "FINISHED", mapOf(
+            "unresolvedReservationIds" to coordinator.plan?.unresolvedReservationIds.orEmpty(),
+            "incidents" to session.incidents
+        ))
         sessions.remove(accommodationId)
+    }
+
+    private fun schedule(session: RecoverySession, roomId: Long, startDate: LocalDate, endDate: LocalDate): Map<String, Any> {
+        return mapOf(
+            "roomName" to (session.roomNames[roomId] ?: "객실 $roomId"),
+            "startDate" to startDate,
+            "endDate" to endDate
+        )
     }
 
     private fun session(accommodationId: Long, sessionId: String): RecoverySession {

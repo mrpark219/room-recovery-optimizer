@@ -6,7 +6,15 @@ import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/accommodations/{accommodationId}/recovery-sessions")
-class RecoverySessionController(private val recoverySessionService: RecoverySessionService) {
+class RecoverySessionController(
+    private val recoverySessionService: RecoverySessionService,
+    private val recoveryHistory: RecoveryHistory
+) {
+    @GetMapping("/history")
+    fun history(@PathVariable accommodationId: Long): List<RecoveryHistoryItem> {
+        return recoveryHistory.list(accommodationId)
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     fun create(@PathVariable accommodationId: Long, @RequestBody request: CreateSessionRequest): RecoverySessionView {

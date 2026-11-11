@@ -6,6 +6,7 @@ import RecoveryControls from "@/components/RecoveryControls";
 import OutageForm from "@/components/OutageForm";
 import useReservations from "@/components/useReservations";
 import ReservationContext from "@/components/ReservationContext";
+import OutageTabs from "@/components/OutageTabs";
 import AccommodationHeader from "@/components/AccommodationHeader";
 import { useRouter } from "next/navigation";
 import { api, ApiError, base, roomName, today, sessionKey } from "@/lib/api";
@@ -247,6 +248,7 @@ export default function OutageView({ id }: { id: string }) {
         />
       )}
       <AccommodationHeader id={id} name={name} tab="outages" />
+      <OutageTabs id={id} />
       {error && (
         <div role="alert" className="notice error">
           {error}{" "}
